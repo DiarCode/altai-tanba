@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from minio import Minio
 from minio.error import S3Error
 
-from core.config.settings import settings
+from src.core.config.settings import settings
 
 
 class S3Client:

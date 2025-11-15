@@ -1,16 +1,18 @@
 from fastapi import FastAPI
 from src.core.config.settings import settings
+from src.core.db.prisma import lifespan
+from src.modules.sessions.router import router as sessions_router
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(
-        title=settings.APP_NAME,
-        version="0.1.0"
-    )
+    app = FastAPI(title=settings.APP_NAME, version="0.1.0", lifespan=lifespan)
 
     # Тестовый endpoint для проверки
     @app.get("/ping")
     async def ping():
         return {"status": "ok"}
+
+    # Routers
+    app.include_router(sessions_router, prefix="/sessions", tags=["sessions"])
 
     return app
