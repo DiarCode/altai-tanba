@@ -29,7 +29,7 @@ from src.core.utils.pdf import pdf_to_images
 from src.modules.mark_service.types import PageImage, Detection
 from src.modules.mark_service.utils import yolo_results_to_detections, build_labeled_pdf
 from src.modules.mark_service.formatters import build_challenge_json
-from src.core.s3 import S3Client, MockS3Client
+from src.core.s3.s3_service import s3_service
 from src.core.config.settings import settings
 
 class DigitalInspectorProcessor:
@@ -37,7 +37,7 @@ class DigitalInspectorProcessor:
         if s3_client is not None:
             self.s3 = s3_client
         else:
-            self.s3 = MockS3Client() if settings.USE_STUB_ADAPTER else S3Client()
+            self.s3 = s3_service
         self.qr_model = YOLO(str(QR_WEIGHTS))
         self.sig_model = YOLO(str(SIG_WEIGHTS))
         self.stamp_model = YOLO(str(STAMP_WEIGHTS))

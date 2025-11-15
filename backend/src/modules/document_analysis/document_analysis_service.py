@@ -18,7 +18,7 @@ class DocumentAnalysisService:
     4. Save results to database
     """
 
-    async def analyze_document(self, document_id: str) -> Dict[str, Any]:
+    async def analyze_document(self, document_id: str | int) -> Dict[str, Any]:
         """
         Analyze a document for fraud compliance.
         
@@ -44,20 +44,32 @@ class DocumentAnalysisService:
             # Step 1: Create initial database record with PROCESSING status
             print(f"[DEBUG] Creating analysis record...")
             start = time.time()
+            # Normalize document id to numeric string key
+            try:
+                doc_int = int(str(document_id).split('/')[-1])
+            except ValueError:
+                raise Exception(f"Invalid document id: {document_id}")
+
             analysis = await db.documentanalysis.create(
                 data={
-                    "documentId": document_id,
+                    "documentId": str(doc_int),
                     "status": "PROCESSING"
                 }
             )
             analysis_id = analysis.id
             print(f"[DEBUG] Analysis record created in {time.time() - start:.2f}s")
             
-            # Step 2: Download images from MinIO
+            # Step 2: Resolve S3 prefix from DB and download images from MinIO
+            doc = await db.sessiondocument.find_unique(where={"id": doc_int})
+            if not doc:
+                await db._update_failed_status(analysis_id, f"Document not found: {doc_int}")
+                raise Exception(f"Document not found: {doc_int}")
+
+            prefix = f"sessions/{doc.sessionId}/documents/{doc.id}"
             try:
                 print(f"[DEBUG] Downloading images from S3...")
                 start = time.time()
-                images = await s3_service.download_document_images(document_id)
+                images = await s3_service.download_document_images(prefix)
                 print(f"[DEBUG] Images downloaded in {time.time() - start:.2f}s")
             except Exception as e:
                 error_msg = f"Failed to download images: {str(e)}"
@@ -134,9 +146,13 @@ class DocumentAnalysisService:
         try:
             await db.connect()
             
-            analysis = await db.documentanalysis.find_unique(
-                where={"documentId": document_id}
-            )
+            # Accept either numeric id or legacy prefix; normalize to numeric string
+            try:
+                key = str(int(document_id.split('/')[-1]))
+            except ValueError:
+                key = document_id
+
+            analysis = await db.documentanalysis.find_unique(where={"documentId": key})
             
             if not analysis:
                 return {

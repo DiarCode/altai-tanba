@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 from typing import List
 import boto3
 from botocore.client import Config
@@ -23,7 +24,7 @@ class S3Service:
         )
         self.bucket = settings.S3_BUCKET
 
-    async def download_document_images(self, document_id: str) -> List[tuple[str, bytes]]:
+    async def download_document_images(self, prefix: str) -> List[tuple[str, bytes]]:
         """
         Download all PNG images from a document's pages folder.
         
@@ -37,7 +38,7 @@ class S3Service:
             Exception: If download fails
         """
         try:
-            prefix = f"{document_id}/pages/"
+            prefix = f"{prefix}/pages/"
             
             # List all objects with the given prefix
             response = self.client.list_objects_v2(
@@ -46,7 +47,7 @@ class S3Service:
             )
             
             if 'Contents' not in response:
-                raise Exception(f"No images found for document {document_id}")
+                raise Exception(f"No images found for prefix {prefix}")
             
             images = []
             for obj in response['Contents']:
@@ -75,30 +76,26 @@ class S3Service:
         except Exception as e:
             raise Exception(f"Error downloading document images: {str(e)}")
 
-    async def upload_file(self, file_bytes: bytes, key: str, content_type: str = 'application/octet-stream') -> str:
+    def upload_file(self, local_path: str, key: str) -> str:
         """
-        Upload a file to S3.
-        
-        Args:
-            file_bytes: File content as bytes
-            key: S3 object key (path)
-            content_type: MIME type of the file
-            
-        Returns:
-            The S3 key of the uploaded file
+        Upload a local file to S3 and return PUBLIC URL,
+        аналогично старому S3Client.upload_file(local_path, remote_key).
         """
         try:
-            file_obj = io.BytesIO(file_bytes)
-            self.client.upload_fileobj(
-                file_obj,
-                self.bucket,
-                key,
-                ExtraArgs={'ContentType': content_type}
+            object_name = key.lstrip("/")
+            file_path = str(Path(local_path))
+
+            # простой upload по пути к файлу
+            self.client.upload_file(
+                Filename=file_path,
+                Bucket=self.bucket,
+                Key=object_name,
             )
-            return key
+
+            base = settings.S3_RESPONSE_ENDPOINT.rstrip("/")
+            return f"{base}/{object_name}"
+
         except ClientError as e:
             raise Exception(f"Failed to upload file to S3: {str(e)}")
-
-
 # Singleton instance
 s3_service = S3Service()
