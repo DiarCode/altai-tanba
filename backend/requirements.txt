@@ -25,3 +25,8 @@ tomlkit==0.13.3
 typing-extensions==4.15.0
 typing-inspection==0.4.2
 uvicorn==0.38.0
+
+# Document Analysis Dependencies
+boto3==1.35.76
+easyocr==1.7.2
+pillow==11.0.0
