@@ -1,0 +1,35 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+
+# === Env-файлы ===
+.env
+# пример оставляем в репе
+!.env.example
+
+# === Логи ===
+*.log
+
+# === IDE / редакторы ===
+.vscode/
+.idea/
+*.iml
+
+# === Prisma / Node (для npx prisma и т.п.) ===
+node_modules/
+.prisma/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+
+# === OS-мусор ===
+.DS_Store
+Thumbs.db
