@@ -6,7 +6,7 @@ from typing import List, Tuple
 
 import fitz  # PyMuPDF
 
-from modules.mark_service.types import PageImage
+from src.modules.mark_service.types import PageImage
 
 
 def compute_doc_hash(pdf_path: Path) -> str:
