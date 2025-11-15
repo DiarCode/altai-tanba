@@ -1,6 +1,7 @@
 import io
 from typing import List
 from PIL import Image
+import numpy as np
 import easyocr
 
 
@@ -32,9 +33,12 @@ class OCRService:
                 # Convert bytes to PIL Image
                 image = Image.open(io.BytesIO(image_bytes))
                 
+                # Convert PIL Image to numpy array for EasyOCR
+                image_array = np.array(image)
+                
                 # Perform OCR
                 # readtext returns list of (bbox, text, confidence)
-                results = self.reader.readtext(image)
+                results = self.reader.readtext(image_array)
                 
                 # Extract just the text from results
                 page_text = " ".join([result[1] for result in results])
@@ -64,7 +68,8 @@ class OCRService:
         """
         try:
             image = Image.open(io.BytesIO(image_bytes))
-            results = self.reader.readtext(image)
+            image_array = np.array(image)
+            results = self.reader.readtext(image_array)
             text = " ".join([result[1] for result in results])
             return text
         except Exception as e:
