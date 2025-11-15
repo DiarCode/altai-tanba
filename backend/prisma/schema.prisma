@@ -13,6 +13,79 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// =====================
+// Enums (статусы)
+// =====================
+
+enum SESSION_STATUS {
+  PROCESSING
+  FAILED
+  SUCCESS
+}
+
+enum DOCUMENT_STATUS {
+  PENDING
+  FAILED
+  SUCCESSFUL
+}
+
+model Session {
+  id              Int                 @id @default(autoincrement()) @map("id")
+  documentsCount  Int                 @default(0) @map("documents_count")
+  status          SESSION_STATUS      @default(PROCESSING) @map("status")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @default(now()) @updatedAt @map("updated_at")
+
+  documents       SessionDocument[]
+
+  @@map("sessions")
+}
+
+model SessionDocument {
+  id              Int                @id @default(autoincrement()) @map("id")
+  originalName    String             @map("original_name")
+  documentId      String             @map("document_id")
+
+  sessionId       Int                @map("session_id")
+  status          DOCUMENT_STATUS    @default(PENDING) @map("status")
+
+  labelsPosition  Json?              @map("labels_position") @db.JsonB
+
+  hasSignature    Boolean            @default(false) @map("has_signature")
+  hasQR           Boolean            @default(false) @map("has_qr")
+  hasStamp        Boolean            @default(false) @map("has_stamp")
+
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @default(now()) @updatedAt @map("updated_at")
+
+  session         Session            @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  texts           SessionDocumentText[]
+
+  @@index([sessionId])
+  @@map("session_documents")
+}
+
+model SessionDocumentText {
+  id         Int             @id @default(autoincrement()) @map("id")
+
+  documentId Int             @map("document_id")
+  status     DOCUMENT_STATUS @default(PENDING) @map("status")
+
+  text       String?         @map("text") @db.Text
+  mistakes   String[]        @map("mistakes")
+  frauds     String[]        @map("frauds") 
+  type       String?         @map("type")      
+  summary    String?         @map("summary") @db.Text
+
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @default(now()) @updatedAt @map("updated_at")
+
+  document   SessionDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@map("session_document_texts")
+}
+
 enum DocumentAnalysisStatus {
   PROCESSING
   COMPLETED
