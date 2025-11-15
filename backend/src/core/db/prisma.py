@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
     # Pre-initialize OCR service to avoid delays on first request
     print("Pre-initializing OCR service...")
     from src.core.services.ocr_service import ocr_service
-    ocr_service._ensure_reader()
+    ocr_service.pre_initialize()
     print("OCR service ready.")
     
     try:
