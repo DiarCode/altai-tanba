@@ -1,6 +1,5 @@
 <!-- /pages/SessionDocument.vue -->
 <script setup lang="ts">
-import TestPdf from '@/core/assets/test.pdf'
 import { Button } from '@/core/components/ui/button'
 import {
   Sheet,
@@ -9,6 +8,16 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/core/components/ui/sheet'
+import {
+  useDocumentAnalysisStatus,
+  useSessionDocumentDetails,
+} from '@/modules/session/composables/session.composables'
+import {
+  DocumentAnalysisState,
+  type LabelsDetection,
+  type LabelsPageArtifact,
+  type SessionDocumentDetailsDto,
+} from '@/modules/session/models/session.models'
 import { useColorMode } from '@vueuse/core'
 import {
   AlertTriangle,
@@ -26,7 +35,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-vue-next'
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 useColorMode({ initialValue: 'dark' })
@@ -34,81 +43,45 @@ useColorMode({ initialValue: 'dark' })
 const route = useRoute()
 const router = useRouter()
 
-const sessionId = route.params.sessionId ?? route.params.id
-const documentId = route.params.documentId ?? route.params.docId ?? route.params.documentId
+const sessionId = computed(() => (route.params.sessionId ?? route.params.id) as string)
+const documentId = computed(
+  () => (route.params.documentId ?? route.params.docId ?? route.params.documentId) as string,
+)
 
-interface DetectionOut {
-  category: string
-  x: number
-  y: number
-  width: number
-  height: number
-  area: number
-  confidence: number
-}
+const documentQuery = useSessionDocumentDetails(sessionId, documentId)
+const analysisQuery = useDocumentAnalysisStatus(documentId)
 
-interface PageArtifacts {
-  pageIndex: number
-  imageUrl: string
-  labeledImageUrl?: string | null
-}
+const documentData = computed<SessionDocumentDetailsDto | null>(
+  () => documentQuery.data.value ?? null,
+)
+const analysisData = computed(() => analysisQuery.data.value ?? null)
 
-interface DocumentArtifacts {
-  originalPdfUrl: string
-  labeledPdfUrl?: string | null
-  pages: PageArtifacts[]
-}
+const isLoading = computed(
+  () => documentQuery.isLoading.value || analysisQuery.isLoading.value,
+)
+const hasData = computed(() => !!documentData.value)
 
-interface LabelsDTO {
-  artifacts: DocumentArtifacts
-  detections: Record<number, DetectionOut[]>
-}
-
-interface SessionDocumentDTO {
-  id: string
-  documentUrl: string
-  labeledUrl?: string
-  originalName: string
-  status: 'PENDING' | 'SUCCESSFUL' | 'FAILED'
-  createdAt: string
-  updatedAt: string
-  verification?: {
-    hasQR: boolean
-    hasStamp: boolean
-    hasSignature: boolean
-  }
-  labels: LabelsDTO
-  type: string
-  mistakes: string[]
-  frauds: string[]
-  summary: string
-}
-
-const isLoading = ref(true)
-const documentData = ref<SessionDocumentDTO | null>(null)
 const activePageIndex = ref(0)
 const zoomLevel = ref(1)
 
-// Detection visibility toggles
 const showQR = ref(true)
 const showSignature = ref(true)
 const showStamp = ref(true)
 
-// --- Computed helpers ---
-const hasData = computed(() => !!documentData.value)
+const labelsPayload = computed(() => documentData.value?.labelsPosition ?? null)
+const pageArtifacts = computed(() => labelsPayload.value?.artifacts.pages ?? [])
+const currentPage = computed<LabelsPageArtifact | null>(
+  () => pageArtifacts.value[activePageIndex.value] ?? null,
+)
 
-const currentPage = computed<PageArtifacts | null>(() => {
-  if (!documentData.value) return null
-  return documentData.value.labels.artifacts.pages[activePageIndex.value] ?? null
-})
+const detectionsByPage = computed(() => labelsPayload.value?.detections ?? {})
 
-// Filtered detections based on toggle states
 const filteredDetections = computed(() => {
-  if (!documentData.value || !currentPage.value) return []
+  if (!currentPage.value) return []
 
-  const detections = documentData.value.labels.detections[currentPage.value.pageIndex] || []
+  const detections = detectionsByPage.value[currentPage.value.pageIndex] ?? []
 
-  return detections.filter((det) => {
+  return detections.filter((det: LabelsDetection) => {
     const category = det.category.toLowerCase()
     if (category.includes('qr') && !showQR.value) return false
     if ((category.includes('sign') || category.includes('подп')) && !showSignature.value)
@@ -119,9 +92,8 @@ const filteredDetections = computed(() => {
   })
 })
 
-const allDetections = computed<DetectionOut[]>(() => {
-  if (!documentData.value) return []
-  const detectionsObj = documentData.value.labels.detections
+const allDetections = computed<LabelsDetection[]>(() => {
+  const detectionsObj = detectionsByPage.value
   return Object.values(detectionsObj).flat()
 })
 
@@ -147,6 +119,38 @@ const detectionStats = computed(() => {
   return base
 })
 
+const analysisSummary = computed(
+  () =>
+    analysisData.value?.documentSummary ??
+    'Результаты анализа появятся сразу после завершения обработки документа.',
+)
+const analysisMistakes = computed(() => analysisData.value?.mistakeWords ?? [])
+const analysisFrauds = computed(() => analysisData.value?.fraudSentences ?? [])
+const analysisDocumentType = computed(
+  () => analysisData.value?.documentType ?? documentData.value?.originalName ?? 'Документ',
+)
+const analysisStatus = computed(
+  () => analysisData.value?.status ?? DocumentAnalysisState.PROCESSING,
+)
+const isAnalysisProcessing = computed(
+  () => analysisStatus.value === DocumentAnalysisState.PROCESSING,
+)
+const analysisErrorMessage = computed(
+  () => analysisData.value?.errorLog ?? analysisData.value?.message ?? null,
+)
+const analysisStatusMeta = computed(() => {
+  switch (analysisStatus.value) {
+    case DocumentAnalysisState.COMPLETED:
+      return { label: 'Анализ завершён', color: 'bg-emerald-400' }
+    case DocumentAnalysisState.FAILED:
+      return { label: 'Ошибка анализа', color: 'bg-rose-400' }
+    case DocumentAnalysisState.NOT_FOUND:
+      return { label: 'Анализ не найден', color: 'bg-slate-500' }
+    default:
+      return { label: 'Анализируется', color: 'bg-amber-300' }
+  }
+})
+
 function formatDate(dateString: string) {
   const date = new Date(dateString)
   return date.toLocaleString('ru-RU', {
@@ -157,8 +161,7 @@ function formatDate(dateString: string) {
   })
 }
 
-// Style for detection box (assuming x,y,width,height are normalized 0–1)
-function getBoxStyle(det: DetectionOut) {
+function getBoxStyle(det: LabelsDetection) {
   return {
     left: `${det.x * 100}%`,
     top: `${det.y * 100}%`,
@@ -183,18 +186,13 @@ function getCategoryIcon(category: string) {
   return AlertTriangle
 }
 
-// Navigation functions
 function onPrevPage() {
   if (activePageIndex.value <= 0) return
   activePageIndex.value--
 }
 
 function onNextPage() {
-  if (
-    !documentData.value ||
-    activePageIndex.value >= documentData.value.labels.artifacts.pages.length - 1
-  )
-    return
+  if (activePageIndex.value >= pageArtifacts.value.length - 1) return
   activePageIndex.value++
 }
 
@@ -213,30 +211,31 @@ function resetZoom() {
 }
 
 function handleDownloadOriginal() {
-  if (documentData.value?.documentUrl) {
-    window.open(documentData.value.documentUrl, '_blank')
+  const url = documentData.value?.documentUrl ?? labelsPayload.value?.artifacts.originalPdfUrl
+  if (url) {
+    window.open(url, '_blank')
   }
 }
 
 function handleDownloadLabeled() {
-  if (documentData.value?.labeledUrl) {
-    window.open(documentData.value.labeledUrl, '_blank')
+  const url =
+    documentData.value?.labeledDocumentUrl ?? labelsPayload.value?.artifacts.labeledPdfUrl
+  if (url) {
+    window.open(url, '_blank')
   }
 }
 
-// --- Tiny fake QA chat (only last Q&A shown) ---
 const question = ref('')
 const chatLoading = ref(false)
 const lastQA = ref<{ question: string; answer: string } | null>(null)
 
 async function handleAskQuestion() {
-  if (!question.value.trim() || !documentData.value) return
+  if (!question.value.trim() || !analysisSummary.value || isAnalysisProcessing.value) return
   const q = question.value.trim()
   question.value = ''
   chatLoading.value = true
 
-  // Fake "AI" answer based on summary
-  const baseSummary = documentData.value.summary
+  const baseSummary = analysisSummary.value
   const answer =
     `На основе анализа документа: ${baseSummary.slice(0, 220)}... ` +
     `Все ответы носят ознакомительный характер, проверьте критичные моменты вручную.`
@@ -246,139 +245,25 @@ async function handleAskQuestion() {
   chatLoading.value = false
 }
 
-// --- Fake loading of document details ---
-async function fetchDocumentDetails() {
-  isLoading.value = true
-  try {
-    await new Promise((r) => setTimeout(r, 700))
-
-    const nowIso = new Date().toISOString()
-
-    // Create mock pages with image URLs
-    const mockPages: PageArtifacts[] = [
-      {
-        pageIndex: 0,
-        imageUrl: 'https://picsum.photos/seed/doc-page-1/800/1100.jpg',
-        labeledImageUrl: null,
-      },
-      {
-        pageIndex: 1,
-        imageUrl: 'https://picsum.photos/seed/doc-page-2/800/1100.jpg',
-        labeledImageUrl: null,
-      },
-      {
-        pageIndex: 2,
-        imageUrl: 'https://picsum.photos/seed/doc-page-3/800/1100.jpg',
-        labeledImageUrl: null,
-      },
-    ]
-
-    const labels: LabelsDTO = {
-      artifacts: {
-        originalPdfUrl: TestPdf,
-        labeledPdfUrl: undefined,
-        pages: mockPages,
-      },
-      detections: {
-        0: [
-          {
-            category: 'qr_code',
-            x: 0.08,
-            y: 0.78,
-            width: 0.16,
-            height: 0.12,
-            area: 0.019,
-            confidence: 0.97,
-          },
-          {
-            category: 'stamp',
-            x: 0.62,
-            y: 0.75,
-            width: 0.22,
-            height: 0.13,
-            area: 0.028,
-            confidence: 0.94,
-          },
-          {
-            category: 'signature',
-            x: 0.42,
-            y: 0.82,
-            width: 0.16,
-            height: 0.09,
-            area: 0.014,
-            confidence: 0.91,
-          },
-        ],
-        1: [
-          {
-            category: 'signature',
-            x: 0.35,
-            y: 0.85,
-            width: 0.18,
-            height: 0.1,
-            area: 0.018,
-            confidence: 0.89,
-          },
-          {
-            category: 'qr_code',
-            x: 0.72,
-            y: 0.12,
-            width: 0.14,
-            height: 0.11,
-            area: 0.015,
-            confidence: 0.93,
-          },
-        ],
-        2: [
-          {
-            category: 'stamp',
-            x: 0.15,
-            y: 0.25,
-            width: 0.2,
-            height: 0.15,
-            area: 0.03,
-            confidence: 0.96,
-          },
-        ],
-      },
-    }
-
-    documentData.value = {
-      id: String(documentId ?? '1'),
-      documentUrl: TestPdf,
-      originalName: 'Договор поставки №17/2024.pdf',
-      status: 'SUCCESSFUL',
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      verification: {
-        hasQR: true,
-        hasStamp: true,
-        hasSignature: true,
-      },
-      labels,
-      type: 'Договор поставки',
-      mistakes: [
-        'Отсутствует ссылка на приложение с полной спецификацией товара.',
-        'Не указаны сроки предоставления закрывающих документов.',
-      ],
-      frauds: ['Обнаружено несоответствие ИИН в шапке договора и в блоке подписантов.'],
-      summary:
-        'Документ является договором поставки между двумя контрагентами. Основные условия: предмет договора — поставка оборудования, расчёты по безналичному расчёту, используется авансовая схема. QR-код и печать присутствуют, подпись визуально соответствует типовой подписи уполномоченного лица.',
-    }
-  } catch (e) {
-    console.error('Failed to load document details', e)
-  } finally {
-    isLoading.value = false
-  }
-}
-
 function goBack() {
-  router.push(`/sessions/${sessionId}`)
+  router.push(`/sessions/${sessionId.value}`)
 }
 
-onMounted(() => {
-  fetchDocumentDetails()
-})
+function retryLoad() {
+  documentQuery.refetch()
+  analysisQuery.refetch()
+}
+
+watch(
+  () => pageArtifacts.value.length,
+  (length) => {
+    if (!length) {
+      activePageIndex.value = 0
+      return
+    }
+    activePageIndex.value = Math.min(activePageIndex.value, length - 1)
+  },
+)
 </script>
 
 <template>
@@ -413,7 +298,7 @@ onMounted(() => {
 
           <div class="flex-1 space-y-1">
             <h1 class="text-lg font-semibold text-white sm:text-xl md:text-2xl">
-              {{ documentData.type }}
+              {{ analysisDocumentType }}
             </h1>
           </div>
 
@@ -422,6 +307,20 @@ onMounted(() => {
               <span>{{ documentData.originalName }}</span>
               <span class="h-1 w-1 rounded-full bg-slate-600" />
               <span>{{ formatDate(documentData.updatedAt) }}</span>
+            </div>
+
+            <div class="flex flex-col items-end gap-1 text-xs text-slate-400">
+              <div class="flex items-center gap-2">
+                <span
+                  class="flex items-center gap-1 rounded-full bg-white/5 px-2 py-1"
+                >
+                  <span class="h-1.5 w-1.5 rounded-full" :class="analysisStatusMeta.color" />
+                  {{ analysisStatusMeta.label }}
+                </span>
+              </div>
+              <span v-if="analysisErrorMessage" class="text-rose-300">
+                {{ analysisErrorMessage }}
+              </span>
             </div>
 
             <div class="flex items-center gap-3">
@@ -487,7 +386,7 @@ onMounted(() => {
                           type="submit"
                           size="icon"
                           class="flex h-9 w-9 items-center justify-center rounded-full bg-[linear-gradient(135deg,#2964EB,#2D91ED)] text-white shadow-[0_12px_40px_rgba(56,107,237,0.7)] transition hover:scale-105 active:scale-95"
-                          :disabled="chatLoading || !question.trim()"
+                          :disabled="chatLoading || !question.trim() || isAnalysisProcessing"
                         >
                           <span v-if="!chatLoading" class="flex">
                             <CheckCircle2 class="h-4 w-4" />
@@ -497,6 +396,12 @@ onMounted(() => {
                           </span>
                         </Button>
                       </form>
+                      <p v-if="isAnalysisProcessing" class="text-xs text-amber-300">
+                        Аналитика всё ещё считается, данные обновляются автоматически.
+                      </p>
+                      <p v-else-if="analysisErrorMessage" class="text-xs text-rose-300">
+                        {{ analysisErrorMessage }}
+                      </p>
                     </div>
 
                     <!-- Stats row -->
@@ -551,25 +456,25 @@ onMounted(() => {
                         <span class="font-medium text-base">Краткое резюме</span>
                       </div>
                       <p class="text-base leading-relaxed text-slate-200">
-                        {{ documentData.summary }}
+                        {{ analysisSummary }}
                       </p>
                     </div>
 
                     <!-- Mistakes & frauds -->
                     <div class="space-y-3">
                       <div
-                        v-if="documentData.mistakes.length"
+                        v-if="analysisMistakes.length"
                         class="rounded-[16px] bg-slate-900/80 p-4 ring-1 ring-[#F5A524]/30"
                       >
                         <div class="mb-2 flex items-center gap-2 text-amber-300">
                           <AlertTriangle class="h-4 w-4" />
                           <span class="font-medium text-base"
-                            >Замечания ({{ documentData.mistakes.length }})</span
+                            >Замечания ({{ analysisMistakes.length }})</span
                           >
                         </div>
                         <ul class="space-y-2 text-base text-slate-200">
                           <li
-                            v-for="(m, idx) in documentData.mistakes"
+                            v-for="(m, idx) in analysisMistakes"
                             :key="idx"
                             class="flex gap-2"
                           >
@@ -582,17 +487,17 @@ onMounted(() => {
                       </div>
 
                       <div
-                        v-if="documentData.frauds.length"
+                        v-if="analysisFrauds.length"
                         class="rounded-[16px] bg-slate-900/80 p-4 ring-1 ring-[#F97066]/35"
                       >
                         <div class="mb-2 flex items-center gap-2 text-rose-300">
                           <AlertTriangle class="h-4 w-4" />
                           <span class="font-medium text-base"
-                            >Подозрения на мошенничество ({{ documentData.frauds.length }})</span
+                            >Подозрения на мошенничество ({{ analysisFrauds.length }})</span
                           >
                         </div>
                         <ul class="space-y-2 text-base text-slate-200">
-                          <li v-for="(f, idx) in documentData.frauds" :key="idx" class="flex gap-2">
+                          <li v-for="(f, idx) in analysisFrauds" :key="idx" class="flex gap-2">
                             <span class="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-rose-400" />
                             <span>{{ f }}</span>
                           </li>
@@ -619,14 +524,14 @@ onMounted(() => {
               <ArrowLeft class="h-3 w-3" />
             </Button>
             <span class="px-2 text-white">
-              {{ activePageIndex + 1 }} / {{ documentData.labels.artifacts.pages.length }}
+              {{ pageArtifacts.length ? activePageIndex + 1 : 0 }} / {{ pageArtifacts.length }}
             </span>
             <Button
               variant="ghost"
               size="icon"
               class="h-6 w-6 rounded-full"
               @click="onNextPage"
-              :disabled="activePageIndex >= documentData.labels.artifacts.pages.length - 1"
+              :disabled="activePageIndex >= pageArtifacts.length - 1"
             >
               <ArrowLeft class="h-3 w-3 rotate-180" />
             </Button>
@@ -683,7 +588,7 @@ onMounted(() => {
                   :style="{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center' }"
                 >
                   <img
-                    :src="currentPage.imageUrl"
+                    :src="currentPage.labeledImageUrl ?? currentPage.imageUrl"
                     :alt="`Page ${currentPage.pageIndex + 1}`"
                     class="block max-h-full max-w-full object-contain"
                   />
@@ -807,7 +712,7 @@ onMounted(() => {
           size="sm"
           variant="outline"
           class="mt-1 rounded-full border-white/20 bg-white/5 px-4 py-2 text-sm text-slate-100 hover:bg-white/10"
-          @click="fetchDocumentDetails"
+          @click="retryLoad"
         >
           Повторить
         </Button>

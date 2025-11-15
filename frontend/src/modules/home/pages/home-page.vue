@@ -3,6 +3,7 @@
 import BackgroundImage from '@/core/assets/background-2.jpg'
 import { useColorMode } from '@vueuse/core'
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 /* shadcn-vue primitives (New York v4 registry) */
 import { Button } from '@/core/components/ui/button'
@@ -11,6 +12,7 @@ import { Button } from '@/core/components/ui/button'
 import { cn } from '@/core/lib/tailwind.utils'
 import { CheckCircle2, FileText, Loader2, Upload, X } from 'lucide-vue-next'
 import HomeNavbar from '@/modules/home/components/home-navbar.vue'
+import { useCreateSession } from '@/modules/session/composables/session.composables'
 
 /* theme */
 useColorMode({ initialValue: 'dark' })
@@ -19,7 +21,9 @@ useColorMode({ initialValue: 'dark' })
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFiles = ref<File[]>([])
 const isDragging = ref(false)
-const isUploading = ref(false)
+const router = useRouter()
+const createSessionMutation = useCreateSession()
+const isUploading = computed(() => createSessionMutation.isPending.value)
 
 /* sessions */
 
@@ -58,11 +62,14 @@ function formatFileSize(bytes: number) {
   return `${(bytes / Math.pow(k, idx)).toFixed(1)} ${sizes[idx]}`
 }
 async function handleUpload() {
-  isUploading.value = true
-  await new Promise((r) => setTimeout(r, 1200))
-
-  selectedFiles.value = []
-  isUploading.value = false
+  if (!hasFiles.value || isUploading.value) return
+  try {
+    const session = await createSessionMutation.mutateAsync(selectedFiles.value)
+    selectedFiles.value = []
+    router.push(`/sessions/${session.id}`)
+  } catch (error) {
+    console.error('[sessions] failed to create session', error)
+  }
 }
 </script>
 

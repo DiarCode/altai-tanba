@@ -3,6 +3,8 @@
 import BackgroundImage from '@/core/assets/background-2.jpg'
 import { Button } from '@/core/components/ui/button'
 import HomeNavbar from '@/modules/home/components/home-navbar.vue'
+import { useSession, useSessionDocuments } from '@/modules/session/composables/session.composables'
+import type { SessionDocumentDto } from '@/modules/session/models/session.models'
 import { useColorMode } from '@vueuse/core'
 import {
   ArrowLeft,
@@ -14,39 +16,21 @@ import {
   Stamp,
   XCircle,
 } from 'lucide-vue-next'
-import { computed, onMounted, ref } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 useColorMode({ initialValue: 'dark' })
 
 const router = useRouter()
 const route = useRoute()
-const sessionId = route.params.id as string
+const sessionId = computed(() => route.params.id as string)
 
-interface SessionDTO {
-  id: string
-  totalDocuments: number
-  createdAt: string
-  updatedAt: string
-}
+const sessionQuery = useSession(sessionId)
+const documentsQuery = useSessionDocuments(sessionId, undefined, { refetchInterval: 5000 })
 
-interface SessionDocumentDTO {
-  id: string
-  documentUrl: string
-  originalName: string
-  status: 'PENDING' | 'SUCCESSFUL' | 'FAILED'
-  createdAt: string
-  updatedAt: string
-  verification?: {
-    hasQR: boolean
-    hasStamp: boolean
-    hasSignature: boolean
-  }
-}
-
-const session = ref<SessionDTO | null>(null)
-const documents = ref<SessionDocumentDTO[]>([])
-const isLoading = ref(true)
+const session = computed(() => sessionQuery.data.value ?? null)
+const documents = computed<SessionDocumentDto[]>(() => documentsQuery.data.value ?? [])
+const isLoading = computed(() => sessionQuery.isLoading.value || documentsQuery.isLoading.value)
 
 const completedCount = computed(() => {
   return documents.value.filter((d) => d.status === 'SUCCESSFUL' || d.status === 'FAILED').length
@@ -60,20 +44,6 @@ const progressPercentage = computed(() => {
 const isComplete = computed(() => {
   if (!session.value) return false
   return completedCount.value >= session.value.totalDocuments
-})
-
-// Aggregate stats across all documents
-const aggregateStats = computed(() => {
-  const stats = { qr: 0, stamp: 0, signature: 0 }
-
-  for (const doc of documents.value) {
-    if (!doc.verification) continue
-    if (doc.verification.hasQR) stats.qr += 1
-    if (doc.verification.hasStamp) stats.stamp += 1
-    if (doc.verification.hasSignature) stats.signature += 1
-  }
-
-  return stats
 })
 
 function formatDate(dateString: string) {
@@ -91,137 +61,17 @@ function formatDate(dateString: string) {
   return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
 }
 
-function handleDownload(doc: SessionDocumentDTO) {
-  window.open(doc.documentUrl, '_blank')
-}
-
 function handleDownloadReport() {
   // Заглушка для отчёта по сессии — подставишь свой реальный URL/API
-  window.open(`/sessions/${sessionId}/report`, '_blank')
-}
-
-async function fetchSession() {
-  isLoading.value = true
-  try {
-    await new Promise((r) => setTimeout(r, 800))
-    session.value = {
-      id: sessionId,
-      totalDocuments: 6,
-      createdAt: new Date(Date.now() - 3600000).toISOString(),
-      updatedAt: new Date().toISOString(),
-    }
-  } catch (error) {
-    console.error('Failed to fetch session:', error)
-  }
-}
-
-async function fetchDocuments() {
-  try {
-    await new Promise((r) => setTimeout(r, 500))
-    documents.value = [
-      {
-        id: '1',
-        documentUrl: '/docs/contract-1.pdf',
-        originalName: 'Договор поставки 2024.pdf',
-        status: 'SUCCESSFUL',
-        createdAt: new Date(Date.now() - 3000000).toISOString(),
-        updatedAt: new Date(Date.now() - 2900000).toISOString(),
-        verification: { hasQR: true, hasStamp: true, hasSignature: true },
-      },
-      {
-        id: '2',
-        documentUrl: '/docs/invoice-1.pdf',
-        originalName: 'Счет-фактура 001.pdf',
-        status: 'SUCCESSFUL',
-        createdAt: new Date(Date.now() - 2800000).toISOString(),
-        updatedAt: new Date(Date.now() - 2700000).toISOString(),
-        verification: { hasQR: false, hasStamp: true, hasSignature: true },
-      },
-      {
-        id: '3',
-        documentUrl: '/docs/passport.pdf',
-        originalName: 'Паспорт копия.pdf',
-        status: 'PENDING',
-        createdAt: new Date(Date.now() - 2000000).toISOString(),
-        updatedAt: new Date(Date.now() - 1900000).toISOString(),
-      },
-      {
-        id: '4',
-        documentUrl: '/docs/certificate.pdf',
-        originalName: 'Сертификат качества.pdf',
-        status: 'PENDING',
-        createdAt: new Date(Date.now() - 1500000).toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: '5',
-        documentUrl: '/docs/license.pdf',
-        originalName: 'Лицензия 2024.pdf',
-        status: 'FAILED',
-        createdAt: new Date(Date.now() - 1000000).toISOString(),
-        updatedAt: new Date(Date.now() - 900000).toISOString(),
-      },
-      {
-        id: '6',
-        documentUrl: '/docs/report.pdf',
-        originalName: 'Годовой отчет финансы.pdf',
-        status: 'SUCCESSFUL',
-        createdAt: new Date(Date.now() - 500000).toISOString(),
-        updatedAt: new Date().toISOString(),
-        verification: { hasQR: true, hasStamp: false, hasSignature: true },
-      },
-    ]
-
-    simulateStatusChanges()
-  } catch (error) {
-    console.error('Failed to fetch documents:', error)
-  } finally {
-    isLoading.value = false
-  }
-}
-
-function simulateStatusChanges() {
-  const pendingDocs = documents.value.filter((d) => d.status === 'PENDING')
-  let index = 0
-
-  const interval = setInterval(() => {
-    if (index >= pendingDocs.length) {
-      clearInterval(interval)
-      return
-    }
-
-    const doc = pendingDocs[index]
-    const docIndex = documents.value.findIndex((d) => d.id === doc.id)
-
-    if (docIndex !== -1) {
-      const isSuccess = Math.random() > 0.3
-      documents.value[docIndex].status = isSuccess ? 'SUCCESSFUL' : 'FAILED'
-      documents.value[docIndex].updatedAt = new Date().toISOString()
-
-      if (isSuccess) {
-        documents.value[docIndex].verification = {
-          hasQR: Math.random() > 0.3,
-          hasStamp: Math.random() > 0.2,
-          hasSignature: Math.random() > 0.2,
-        }
-      }
-    }
-
-    index++
-  }, 2500)
+  window.open(`/sessions/${sessionId.value}/report`, '_blank')
 }
 
 const onDocClick = (docId: string) => {
   const doc = documents.value.find((d) => d.id === docId)
   if (doc && doc.status === 'SUCCESSFUL') {
-    router.push(`/sessions/${sessionId}/documents/${doc.id}`)
+    router.push(`/sessions/${sessionId.value}/documents/${doc.id}`)
   }
 }
-
-onMounted(async () => {
-  await fetchSession()
-  await fetchDocuments()
-})
 </script>
 
 <template>
@@ -237,7 +87,7 @@ onMounted(async () => {
         class="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.20)_0,transparent_45%),radial-gradient(circle_at_80%_80%,rgba(79,70,229,0.22)_0,transparent_45%)]"
       />
       <div
-        class="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[length:120px_120px]"
+        class="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-size-[120px_120px]"
       />
     </div>
 
@@ -273,7 +123,7 @@ onMounted(async () => {
               class="text-4xl font-bold leading-tight tracking-tight sm:text-5xl md:text-6xl lg:text-7xl"
             >
               <span
-                class="bg-gradient-to-r from-white via-cyan-100 to-blue-200 bg-clip-text text-transparent"
+                class="bg-linear-to-r from-white via-cyan-100 to-blue-200 bg-clip-text text-transparent"
               >
                 Проверка пакета документов
               </span>
@@ -301,7 +151,7 @@ onMounted(async () => {
           <!-- Progress card -->
           <div class="relative w-full max-w-xs shrink-0 md:max-w-sm">
             <div
-              class="absolute -inset-6 rounded-3xl bg-gradient-to-br from-cyan-400/30 via-blue-500/25 to-indigo-600/25 blur-3xl"
+              class="absolute -inset-6 rounded-3xl bg-linear-to-br from-cyan-400/30 via-blue-500/25 to-indigo-600/25 blur-3xl"
             />
             <div
               class="relative flex h-full w-full flex-col items-center justify-between rounded-3xl border border-cyan-500/20 bg-slate-900/80 px-6 py-6 backdrop-blur-3xl shadow-[0_40px_120px_rgba(15,23,42,0.9)]"
@@ -383,7 +233,7 @@ onMounted(async () => {
             >
               <!-- Header (smaller) -->
               <div
-                class="flex h-40 items-center justify-center bg-gradient-to-br from-white/10 via-cyan-500/10 to-slate-900/40"
+                class="flex h-40 items-center justify-center bg-linear-to-br from-white/10 via-cyan-500/10 to-slate-900/40"
               >
                 <FileText
                   class="h-16 w-16 text-white/60 transition-transform duration-300 group-hover:scale-110 group-hover:text-cyan-300"
