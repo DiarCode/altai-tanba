@@ -1,10 +1,10 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from src.modules.document_analysis_models import (
+from src.modules.document_analysis.document_analysis_models import (
     AnalyzeDocumentRequest,
     AnalyzeDocumentResponse,
     DocumentAnalysisStatusResponse
 )
-from src.modules.document_analysis_service import document_analysis_service
+from src.modules.document_analysis.document_analysis_service import document_analysis_service
 
 
 router = APIRouter(prefix="/document-analysis", tags=["Document Analysis"])

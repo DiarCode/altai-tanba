@@ -8,18 +8,17 @@ from typing import Dict, List
 
 from prisma import Prisma, Json
 
-from src.core.s3 import S3Client, MockS3Client
+from src.core.s3.s3_service import s3_service
 from src.core.config.settings import settings
 from src.modules.mark_service.services.document_processor import DigitalInspectorProcessor
 from src.modules.mark_service.utils import build_labeled_pdf, draw_boxes_on_page, yolo_results_to_detections
 from src.modules.mark_service.formatters import build_challenge_json
 from src.core.utils.pdf import pdf_to_images
 from src.modules.sessions.labels_payload import DetectionOut, PageArtifacts
-from src.modules.document_analysis_service import document_analysis_service
+from src.modules.document_analysis.document_analysis_service import document_analysis_service
 
 
-def _make_s3() -> S3Client | MockS3Client:
-    return MockS3Client() if settings.USE_STUB_ADAPTER else S3Client()
+
 
 
 async def process_document_async(session_id: int, document_id: int, file_path: Path, work_root: Path) -> None:
@@ -39,7 +38,7 @@ async def process_document_async(session_id: int, document_id: int, file_path: P
             print(f"[CLEANUP] Failed to remove {path}: {_e}")
 
     try:
-        s3 = _make_s3()
+        s3 = s3_service
         processor = DigitalInspectorProcessor(s3_client=s3)
 
         # 1) PDF → images

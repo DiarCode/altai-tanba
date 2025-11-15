@@ -9,9 +9,16 @@ class OCRService:
     """Service for extracting text from images using OCR."""
 
     def __init__(self):
-        # Initialize EasyOCR reader for Russian and English
-        # This will download models on first use
-        self.reader = easyocr.Reader(['ru', 'en'], gpu=False)
+        # Lazy initialization - reader will be initialized on first use
+        self._reader = None
+    
+    def _ensure_reader(self):
+        """Initialize the EasyOCR reader if not already initialized."""
+        if self._reader is None:
+            print("Initializing EasyOCR reader (this may take a few minutes on first run)...")
+            self._reader = easyocr.Reader(['ru', 'en'], gpu=False)
+            print("EasyOCR reader initialized successfully.")
+        return self._reader
 
     async def extract_text_from_images(self, images: List[tuple[str, bytes]]) -> str:
         """
@@ -27,6 +34,7 @@ class OCRService:
             Exception: If OCR extraction fails
         """
         try:
+            reader = self._ensure_reader()
             all_text = []
             
             for filename, image_bytes in images:
@@ -38,7 +46,7 @@ class OCRService:
                 
                 # Perform OCR
                 # readtext returns list of (bbox, text, confidence)
-                results = self.reader.readtext(image_array)
+                results = reader.readtext(image_array)
                 
                 # Extract just the text from results
                 page_text = " ".join([result[1] for result in results])
@@ -67,9 +75,10 @@ class OCRService:
             Extracted text
         """
         try:
+            reader = self._ensure_reader()
             image = Image.open(io.BytesIO(image_bytes))
             image_array = np.array(image)
-            results = self.reader.readtext(image_array)
+            results = reader.readtext(image_array)
             text = " ".join([result[1] for result in results])
             return text
         except Exception as e:

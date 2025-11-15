@@ -1,4 +1,5 @@
 import httpx
+import time
 from typing import List, Dict, Any
 from src.core.config.settings import settings
 
@@ -15,22 +16,35 @@ class LLMService:
         """
         Analyze document text using Modal Labs LLM endpoint.
         
-        This sends three separate requests to analyze:
+        This sends four separate requests to analyze:
         1. Fraud detection
         2. Spelling mistakes
         3. Document type classification
+        4. Document summary
         
         Args:
             text: The extracted text from the document
             
         Returns:
-            Dictionary containing fraudSentences, mistakeWords, and documentType
+            Dictionary containing fraudSentences, mistakeWords, documentType, and documentSummary
             
         Raises:
             Exception: If LLM analysis fails
         """
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            print(f"[DEBUG] Creating httpx client with timeout={self.timeout}s...")
+            start = time.time()
+            # Configure httpx with explicit timeouts and connection settings
+            timeout_config = httpx.Timeout(
+                timeout=self.timeout,
+                connect=10.0,  # 10 seconds for connection
+                read=self.timeout,
+                write=10.0,
+                pool=5.0
+            )
+            async with httpx.AsyncClient(timeout=timeout_config) as client:
+                print(f"[DEBUG] httpx client created in {time.time() - start:.2f}s")
+                
                 # Request 1: Fraud detection
                 fraud_result = await self._detect_fraud(client, text)
                 
@@ -40,10 +54,14 @@ class LLMService:
                 # Request 3: Document type
                 doc_type_result = await self._classify_document(client, text)
                 
+                # Request 4: Document summary
+                summary_result = await self._generate_summary(client, text)
+                
                 return {
                     "fraudSentences": fraud_result,
                     "mistakeWords": mistakes_result,
-                    "documentType": doc_type_result
+                    "documentType": doc_type_result,
+                    "documentSummary": summary_result
                 }
                 
         except Exception as e:
@@ -51,14 +69,20 @@ class LLMService:
 
     async def _detect_fraud(self, client: httpx.AsyncClient, text: str) -> List[str]:
         """Detect fraudulent sentences in the text."""
-        prompt = f"""INSTRUCTIONS: You are an assistant that detects fraudulent or suspicious sentences in documents. You should identify sentences that contain fraudulent content, scams, illegal requests, or suspicious clauses. Return ONLY the fraudulent sentences separated by semicolons (;). If no fraud is detected, return an empty string.
+        prompt = f"""INSTRUCTIONS: You are an assistant that detects fraudulent or suspicious content in documents. Analyze the text and identify any fraudulent content, scams, illegal requests, or suspicious clauses. Instead of returning the exact sentences from the document, return brief summary descriptions of the fraud found. Return ONLY the fraud summaries separated by semicolons (;). If no fraud is detected, return an empty string.
+
+EXAMPLE:
+Input: "Вы должны заплатить 10000 долларов просто так без причины"
+Response: "В тексте документа замечен неправомерный перевод больших сумм"
 
 TEXT FOR ANALYSIS:
 {text}
 
-RESPONSE FORMAT: sentence1; sentence2; sentence3"""
+RESPONSE FORMAT: fraud_summary1; fraud_summary2; fraud_summary3"""
 
         try:
+            print(f"[DEBUG] Sending fraud detection request to {self.base_url}/chat...")
+            start = time.time()
             response = await client.post(
                 f"{self.base_url}/chat",
                 json={
@@ -67,6 +91,7 @@ RESPONSE FORMAT: sentence1; sentence2; sentence3"""
                     "temperature": 0.3
                 }
             )
+            print(f"[DEBUG] Fraud detection request completed in {time.time() - start:.2f}s")
             response.raise_for_status()
             
             result = response.json()
@@ -146,6 +171,34 @@ RESPONSE FORMAT: Single word or short phrase representing the document type (e.g
             
         except Exception as e:
             raise Exception(f"Document classification failed: {str(e)}")
+
+    async def _generate_summary(self, client: httpx.AsyncClient, text: str) -> str:
+        """Generate a brief summary of the document."""
+        prompt = f"""INSTRUCTIONS: You are an assistant that creates brief summaries of documents. Analyze the following document text and provide a concise summary describing what this document is about. The summary should be 2-3 sentences maximum and capture the main purpose and content of the document. Return ONLY the summary text.
+
+DOCUMENT:
+{text}
+
+RESPONSE FORMAT: A brief summary of the document (2-3 sentences)"""
+
+        try:
+            response = await client.post(
+                f"{self.base_url}/chat",
+                json={
+                    "prompt": prompt,
+                    "max_tokens": 1024,
+                    "temperature": 0.5
+                }
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            summary = result.get("response", "").strip()
+            
+            return summary if summary else "Не удалось создать описание документа"
+            
+        except Exception as e:
+            raise Exception(f"Summary generation failed: {str(e)}")
 
 
 # Singleton instance

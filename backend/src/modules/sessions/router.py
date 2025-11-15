@@ -6,6 +6,7 @@ from typing import List
 from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile, HTTPException, Query
 from prisma import Prisma
 
+from src.core.db.prisma import get_db
 from src.modules.sessions.dto_mappers import map_document_to_dto, map_session_to_dto
 from src.modules.sessions.service import create_session_with_documents
 from src.modules.sessions.types import (
@@ -16,7 +17,10 @@ from src.modules.sessions.types import (
 )
 from src.modules.sessions.labels_payload import LabelsPositionPayload
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/sessions",    
+    tags=["sessions"],      
+)
 
 
 WORK_ROOT = Path.cwd() / "work_dir"
@@ -24,16 +28,19 @@ WORK_ROOT = Path.cwd() / "work_dir"
 
 @router.get("", response_model=List[SessionDTO])
 async def list_sessions(
-    page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
-    status: str | None = Query(None, description="Filter by session status: PROCESSING|FAILED|SUCCESS"),
+    status: str | None = Query(
+        None,
+        description="Filter by session status: PROCESSING|FAILED|SUCCESS",
+    ),
+  db: Prisma = Depends(get_db),
 ) -> List[SessionDTO]:
     db = Prisma()
     await db.connect()
     try:
         where = {"status": status} if status else None
         sessions = await db.session.find_many(
-            where=where, order={"createdAt": "desc"}, skip=(page - 1) * size, take=size
+            where=where,
+            order={"createdAt": "desc"},
         )
         return [map_session_to_dto(s) for s in sessions]
     finally:
@@ -41,9 +48,10 @@ async def list_sessions(
 
 
 @router.get("/{session_id}", response_model=SessionDTO)
-async def get_session(session_id: int) -> SessionDTO:
-    db = Prisma()
-    await db.connect()
+async def get_session(
+    session_id: int,
+    db: Prisma = Depends(get_db)
+    ) -> SessionDTO:
     try:
         s = await db.session.find_unique(where={"id": session_id})
         if not s:
@@ -59,9 +67,9 @@ async def list_session_documents(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     status: SessionDocumentStatus | None = Query(None),
+    db: Prisma = Depends(get_db),
 ) -> List[SessionDocumentDTO]:
-    db = Prisma()
-    await db.connect()
+
     try:
         where = {"sessionId": session_id}
         if status:
@@ -75,9 +83,11 @@ async def list_session_documents(
 
 
 @router.get("/{session_id}/documents/{doc_id}", response_model=SessionDocumentDetailsDto)
-async def get_session_document(session_id: int, doc_id: int) -> SessionDocumentDetailsDto:
-    db = Prisma()
-    await db.connect()
+async def get_session_document(
+    session_id: int,
+    doc_id: int,    
+    db: Prisma = Depends(get_db),
+) -> SessionDocumentDetailsDto:
     try:
         d = await db.sessiondocument.find_unique(where={"id": doc_id})
         if not d or d.sessionId != session_id:
@@ -113,12 +123,12 @@ async def get_session_document(session_id: int, doc_id: int) -> SessionDocumentD
         await db.disconnect()
 
 
-@router.post("/", response_model=SessionDTO)
 @router.post("", response_model=SessionDTO)
 async def create_session(
     background: BackgroundTasks,
     files: List[UploadFile] | None = File(default=None),
     file: UploadFile | None = File(default=None),
+    db: Prisma = Depends(get_db),
 ) -> SessionDTO:
     # Accept either `files` (multiple) or `file` (single) for Postman friendliness
     incoming: List[UploadFile] = []
@@ -128,8 +138,7 @@ async def create_session(
         incoming.append(file)
     session_id = await create_session_with_documents(incoming, background, WORK_ROOT)
     # Return session base data
-    db = Prisma()
-    await db.connect()
+
     try:
         s = await db.session.find_unique(where={"id": session_id})
         return map_session_to_dto(s)
