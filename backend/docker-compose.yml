@@ -1,6 +1,6 @@
 services:
   postgres:
-    container_name: lexify-postgres
+    container_name: tanba-postgres
     image: postgres:latest
     restart: unless-stopped
     ports:
@@ -15,7 +15,7 @@ services:
       - ./.env
 
   pgadmin:
-    container_name: lexify-pgadmin
+    container_name: tanba-pgadmin
     image: dpage/pgadmin4
     depends_on:
       - postgres
@@ -29,7 +29,7 @@ services:
       - ./.env
 
   minio:
-    container_name: lexify-minio
+    container_name: tanba-minio
     image: minio/minio:RELEASE.2025-02-18T16-25-55Z
     ports:
       - "9000:9000" # S3 API
