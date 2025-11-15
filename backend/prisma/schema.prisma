@@ -99,6 +99,7 @@ model DocumentAnalysis {
   fraudSentences   String[]                @default([])
   mistakeWords     String[]                @default([])
   documentType     String?
+  documentSummary  String?
   errorLog         String?
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
