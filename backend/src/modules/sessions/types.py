@@ -53,6 +53,7 @@ class SessionDocumentDetailsDto(SessionDocumentDTO):
 	model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
 	labeled_document_url: Optional[str] = None
+	labels_position: Optional[dict] = None
 
 __all__ = [
 	"SessionDTO",
@@ -60,5 +61,6 @@ __all__ = [
 	"SessionDocumentVerification",
 	"SessionDocumentDTO",
 	"SessionDocumentDetailsDto",
+    # keep exports stable
 ]
 

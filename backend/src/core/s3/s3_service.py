@@ -23,7 +23,7 @@ class S3Service:
         )
         self.bucket = settings.S3_BUCKET
 
-    async def download_document_images(self, document_id: str) -> List[tuple[str, bytes]]:
+    async def download_document_images(self, prefix: str) -> List[tuple[str, bytes]]:
         """
         Download all PNG images from a document's pages folder.
         
@@ -37,7 +37,7 @@ class S3Service:
             Exception: If download fails
         """
         try:
-            prefix = f"{document_id}/pages/"
+            prefix = f"{prefix}/pages/"
             
             # List all objects with the given prefix
             response = self.client.list_objects_v2(
@@ -46,7 +46,7 @@ class S3Service:
             )
             
             if 'Contents' not in response:
-                raise Exception(f"No images found for document {document_id}")
+                raise Exception(f"No images found for prefix {prefix}")
             
             images = []
             for obj in response['Contents']:

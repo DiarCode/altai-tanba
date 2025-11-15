@@ -23,11 +23,27 @@ def map_document_to_dto(doc) -> SessionDocumentDTO:
     # Resolve documentUrl from labelsPosition if available
     artifacts_url = None
     if doc.labelsPosition:
+        # Try legacy payload first
         try:
             payload = LabelsPositionPayload.model_validate(doc.labelsPosition)
             artifacts_url = payload.artifacts.originalPdfUrl
         except Exception:
-            artifacts_url = None
+            # Fallback to challenge JSON shape with embedded artifacts
+            lp = doc.labelsPosition
+            try:
+                if isinstance(lp, dict):
+                    # Direct artifacts on root
+                    if "artifacts" in lp and isinstance(lp["artifacts"], dict):
+                        artifacts_url = lp["artifacts"].get("originalPdfUrl")
+                    else:
+                        # Nested under safe key
+                        first_val = next(iter(lp.values())) if lp else None
+                        if isinstance(first_val, dict) and "artifacts" in first_val:
+                            art = first_val["artifacts"]
+                            if isinstance(art, dict):
+                                artifacts_url = art.get("originalPdfUrl")
+            except Exception:
+                artifacts_url = None
 
     return SessionDocumentDTO(
         id=str(doc.id),

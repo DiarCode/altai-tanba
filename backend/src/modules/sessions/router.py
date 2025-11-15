@@ -86,12 +86,28 @@ async def get_session_document(session_id: int, doc_id: int) -> SessionDocumentD
         base = map_document_to_dto(d).model_dump(by_alias=True)
         labeled = None
         if d.labelsPosition:
+            # Try legacy payload first
             try:
                 payload = LabelsPositionPayload.model_validate(d.labelsPosition)
                 labeled = payload.artifacts.labeledPdfUrl
             except Exception:
-                labeled = None
+                # Fallback to challenge JSON shape with embedded artifacts
+                lp = d.labelsPosition
+                try:
+                    if isinstance(lp, dict):
+                        if "artifacts" in lp and isinstance(lp["artifacts"], dict):
+                            labeled = lp["artifacts"].get("labeledPdfUrl")
+                        else:
+                            first_val = next(iter(lp.values())) if lp else None
+                            if isinstance(first_val, dict) and "artifacts" in first_val:
+                                art = first_val["artifacts"]
+                                if isinstance(art, dict):
+                                    labeled = art.get("labeledPdfUrl")
+                except Exception:
+                    labeled = None
         base["labeledDocumentUrl"] = labeled
+        # Expose raw labelsPosition JSON (challenge format or legacy) in DTO
+        base["labelsPosition"] = d.labelsPosition if d.labelsPosition else None
         return base
     finally:
         await db.disconnect()

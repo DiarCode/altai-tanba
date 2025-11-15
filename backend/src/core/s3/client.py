@@ -54,7 +54,17 @@ class S3Client:
         self.client.fput_object(self.bucket, object_name, file_path)
 
         base = settings.S3_RESPONSE_ENDPOINT.rstrip("/")
-        return f"{base}/{object_name}"
+        # Build public URL. If path-style, include bucket in path; otherwise use virtual-hosted style.
+        if settings.S3_PATH_STYLE:
+            return f"{base}/{self.bucket}/{object_name}"
+        # Virtual-hosted style: http(s)://<bucket>.<host>/object
+        parsed = urlparse(base)
+        if parsed.scheme and parsed.netloc:
+            host = parsed.netloc
+            scheme = parsed.scheme
+            return f"{scheme}://{self.bucket}.{host}/{object_name}"
+        # Fallback to path-style
+        return f"{base}/{self.bucket}/{object_name}"
 
 
 class MockS3Client:
