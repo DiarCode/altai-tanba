@@ -3,19 +3,17 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 import shutil
-import os
 from typing import Dict, List
 
-from prisma import Prisma, Json
+from prisma import Json
 
 from src.core.s3.s3_service import s3_service
-from src.core.config.settings import settings
 from src.modules.mark_service.services.document_processor import DigitalInspectorProcessor
 from src.modules.mark_service.utils import build_labeled_pdf, draw_boxes_on_page, yolo_results_to_detections
 from src.modules.mark_service.formatters import build_challenge_json
 from src.core.utils.pdf import pdf_to_images
 from src.modules.sessions.labels_payload import DetectionOut, PageArtifacts
-from src.modules.document_analysis.document_analysis_service import document_analysis_service
+from src.core.db.prisma import get_db
 
 
 
@@ -26,8 +24,7 @@ async def process_document_async(session_id: int, document_id: int, file_path: P
     Background task: process a single PDF, upload artifacts to S3, store JSONB payload
     and detections summary into DB, and finalize status.
     """
-    db = Prisma()
-    await db.connect()
+    db = await get_db()
     def _safe_remove(path: Path) -> None:
         try:
             if path.is_dir():
@@ -177,5 +174,3 @@ async def process_document_async(session_id: int, document_id: int, file_path: P
             _safe_remove(file_path)
         except Exception:
             pass
-    finally:
-        await db.disconnect()

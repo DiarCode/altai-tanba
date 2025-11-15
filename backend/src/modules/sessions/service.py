@@ -3,12 +3,12 @@ from __future__ import annotations
 import io
 import zipfile
 from pathlib import Path
-from typing import Iterable, List, Tuple
+from typing import List, Tuple
 
 from fastapi import BackgroundTasks, HTTPException, UploadFile
-from prisma import Prisma
 
 from src.modules.sessions.processors import process_document_async
+from src.core.db.prisma import get_db
 
 
 def _collect_pdfs_from_zip(data: bytes) -> List[Tuple[str, bytes]]:
@@ -38,35 +38,31 @@ async def create_session_with_documents(files: List[UploadFile], background: Bac
     if not pdf_blobs:
         raise HTTPException(status_code=400, detail="No PDFs found in upload")
 
-    db = Prisma()
-    await db.connect()
-    try:
-        session = await db.session.create(
+    db = await get_db()
+    session = await db.session.create(
+        data={
+            "documentsCount": len(pdf_blobs),
+            "status": "PROCESSING",
+        }
+    )
+
+    # Create docs and schedule background processing
+    for original_name, blob in pdf_blobs:
+        doc = await db.sessiondocument.create(
             data={
-                "documentsCount": len(pdf_blobs),
-                "status": "PROCESSING",
+                "originalName": original_name,
+                "documentId": original_name,
+                "sessionId": session.id,
+                "status": "PENDING",
             }
         )
 
-        # Create docs and schedule background processing
-        for original_name, blob in pdf_blobs:
-            doc = await db.sessiondocument.create(
-                data={
-                    "originalName": original_name,
-                    "documentId": original_name,
-                    "sessionId": session.id,
-                    "status": "PENDING",
-                }
-            )
+        # write blob to temp file under work_root
+        doc_temp_dir = work_root / "uploads" / str(session.id)
+        doc_temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_path = doc_temp_dir / f"{doc.id}.pdf"
+        temp_path.write_bytes(blob)
 
-            # write blob to temp file under work_root
-            doc_temp_dir = work_root / "uploads" / str(session.id)
-            doc_temp_dir.mkdir(parents=True, exist_ok=True)
-            temp_path = doc_temp_dir / f"{doc.id}.pdf"
-            temp_path.write_bytes(blob)
+        background.add_task(process_document_async, session.id, doc.id, temp_path, work_root)
 
-            background.add_task(process_document_async, session.id, doc.id, temp_path, work_root)
-
-        return session.id
-    finally:
-        await db.disconnect()
+    return session.id

@@ -19,8 +19,6 @@ import {
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-useColorMode({ initialValue: 'dark' })
-
 const router = useRouter()
 const route = useRoute()
 const sessionId = computed(() => route.params.id as string)
@@ -30,7 +28,7 @@ const documentsQuery = useSessionDocuments(sessionId, undefined, { refetchInterv
 
 const session = computed(() => sessionQuery.data.value ?? null)
 const documents = computed<SessionDocumentDto[]>(() => documentsQuery.data.value ?? [])
-const isLoading = computed(() => sessionQuery.isLoading.value || documentsQuery.isLoading.value)
+const isLoading = computed(() => sessionQuery.isLoading.value)
 
 const completedCount = computed(() => {
   return documents.value.filter((d) => d.status === 'SUCCESSFUL' || d.status === 'FAILED').length

@@ -57,4 +57,5 @@ def map_document_to_dto(doc) -> SessionDocumentDTO:
             "hasStamp": bool(doc.hasStamp),
             "hasSignature": bool(doc.hasSignature),
         },
+        labels_position=doc.labelsPosition if doc.labelsPosition else None,
     )
