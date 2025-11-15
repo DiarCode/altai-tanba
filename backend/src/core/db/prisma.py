@@ -21,8 +21,17 @@ async def disconnect() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Startup
     await connect()
+    
+    # Pre-initialize OCR service to avoid delays on first request
+    print("Pre-initializing OCR service...")
+    from src.core.services.ocr_service import ocr_service
+    ocr_service._ensure_reader()
+    print("OCR service ready.")
+    
     try:
         yield
     finally:
+        # Shutdown
         await disconnect()

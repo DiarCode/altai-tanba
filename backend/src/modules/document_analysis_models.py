@@ -21,6 +21,7 @@ class AnalyzeDocumentResponse(BaseModel):
     fraudSentences: List[str] = Field(..., description="List of fraudulent sentences detected")
     mistakeWords: List[str] = Field(..., description="List of misspelled words detected")
     documentType: str = Field(..., description="Type of the document (e.g., Договор)")
+    documentSummary: str = Field(..., description="Brief summary of the document content")
 
 
 class DocumentAnalysisStatusResponse(BaseModel):
@@ -30,5 +31,6 @@ class DocumentAnalysisStatusResponse(BaseModel):
     fraudSentences: List[str] | None = Field(None, description="List of fraudulent sentences (if completed)")
     mistakeWords: List[str] | None = Field(None, description="List of misspelled words (if completed)")
     documentType: str | None = Field(None, description="Type of the document (if completed)")
+    documentSummary: str | None = Field(None, description="Brief summary of the document (if completed)")
     errorLog: str | None = Field(None, description="Error message (if failed)")
     message: str | None = Field(None, description="Additional information")

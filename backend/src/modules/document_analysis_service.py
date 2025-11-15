@@ -1,5 +1,6 @@
 from typing import Dict, Any
 from datetime import datetime
+import time
 from prisma import Prisma
 from src.core.s3.s3_service import s3_service
 from src.core.services.ocr_service import ocr_service
@@ -17,9 +18,6 @@ class DocumentAnalysisService:
     4. Save results to database
     """
 
-    def __init__(self):
-        self.db = Prisma()
-
     async def analyze_document(self, document_id: str) -> Dict[str, Any]:
         """
         Analyze a document for fraud compliance.
@@ -28,58 +26,75 @@ class DocumentAnalysisService:
             document_id: The document ID
             
         Returns:
-            Analysis results containing fraudSentences, mistakeWords, and documentType
+            Analysis results containing fraudSentences, mistakeWords, documentType, and documentSummary
             
         Raises:
             Exception: If any step of the analysis fails
         """
         analysis_id = None
+        db = Prisma()
         
         try:
             # Connect to database
-            await self.db.connect()
+            print(f"[DEBUG] Starting database connection...")
+            start = time.time()
+            await db.connect()
+            print(f"[DEBUG] Database connected in {time.time() - start:.2f}s")
             
             # Step 1: Create initial database record with PROCESSING status
-            analysis = await self.db.documentanalysis.create(
+            print(f"[DEBUG] Creating analysis record...")
+            start = time.time()
+            analysis = await db.documentanalysis.create(
                 data={
                     "documentId": document_id,
                     "status": "PROCESSING"
                 }
             )
             analysis_id = analysis.id
+            print(f"[DEBUG] Analysis record created in {time.time() - start:.2f}s")
             
             # Step 2: Download images from MinIO
             try:
+                print(f"[DEBUG] Downloading images from S3...")
+                start = time.time()
                 images = await s3_service.download_document_images(document_id)
+                print(f"[DEBUG] Images downloaded in {time.time() - start:.2f}s")
             except Exception as e:
                 error_msg = f"Failed to download images: {str(e)}"
-                await self._update_failed_status(analysis_id, error_msg)
+                await self._update_failed_status(db, analysis_id, error_msg)
                 raise Exception(error_msg)
             
             # Step 3: Extract text from images using OCR
             try:
+                print(f"[DEBUG] Extracting text with OCR...")
+                start = time.time()
                 extracted_text = await ocr_service.extract_text_from_images(images)
+                print(f"[DEBUG] Text extracted in {time.time() - start:.2f}s")
             except Exception as e:
                 error_msg = f"Failed to extract text from images: {str(e)}"
-                await self._update_failed_status(analysis_id, error_msg)
+                await self._update_failed_status(db, analysis_id, error_msg)
                 raise Exception(error_msg)
             
             # Step 4: Analyze text with LLM
             try:
+                print(f"[DEBUG] Analyzing text with LLM...")
+                start = time.time()
                 llm_results = await llm_service.analyze_document_text(extracted_text)
+                print(f"[DEBUG] LLM analysis completed in {time.time() - start:.2f}s")
             except Exception as e:
                 error_msg = f"Failed to analyze text with LLM: {str(e)}"
-                await self._update_failed_status(analysis_id, error_msg)
+                await self._update_failed_status(db, analysis_id, error_msg)
                 raise Exception(error_msg)
             
             # Step 5: Update database with results and COMPLETED status
-            updated_analysis = await self.db.documentanalysis.update(
+            updated_analysis = await db.documentanalysis.update(
                 where={"id": analysis_id},
                 data={
                     "status": "COMPLETED",
                     "fraudSentences": llm_results["fraudSentences"],
                     "mistakeWords": llm_results["mistakeWords"],
                     "documentType": llm_results["documentType"],
+                    "documentSummary": llm_results["documentSummary"],
                     "updatedAt": datetime.utcnow()
                 }
             )
@@ -88,21 +103,22 @@ class DocumentAnalysisService:
             return {
                 "fraudSentences": updated_analysis.fraudSentences,
                 "mistakeWords": updated_analysis.mistakeWords,
-                "documentType": updated_analysis.documentType
+                "documentType": updated_analysis.documentType,
+                "documentSummary": updated_analysis.documentSummary
             }
             
         except Exception as e:
             # If we haven't already marked as failed, do so now
             if analysis_id:
                 try:
-                    await self._update_failed_status(analysis_id, str(e))
+                    await self._update_failed_status(db, analysis_id, str(e))
                 except:
                     pass  # Best effort to update status
             raise
             
         finally:
             # Ensure database connection is closed
-            await self.db.disconnect()
+            await db.disconnect()
 
     async def get_analysis_status(self, document_id: str) -> Dict[str, Any]:
         """
@@ -114,10 +130,11 @@ class DocumentAnalysisService:
         Returns:
             Analysis status and results if available
         """
+        db = Prisma()
         try:
-            await self.db.connect()
+            await db.connect()
             
-            analysis = await self.db.documentanalysis.find_unique(
+            analysis = await db.documentanalysis.find_unique(
                 where={"documentId": document_id}
             )
             
@@ -136,7 +153,8 @@ class DocumentAnalysisService:
                 result.update({
                     "fraudSentences": analysis.fraudSentences,
                     "mistakeWords": analysis.mistakeWords,
-                    "documentType": analysis.documentType
+                    "documentType": analysis.documentType,
+                    "documentSummary": analysis.documentSummary
                 })
             elif analysis.status == "FAILED":
                 result["errorLog"] = analysis.errorLog
@@ -144,12 +162,12 @@ class DocumentAnalysisService:
             return result
             
         finally:
-            await self.db.disconnect()
+            await db.disconnect()
 
-    async def _update_failed_status(self, analysis_id: str, error_message: str):
+    async def _update_failed_status(self, db: Prisma, analysis_id: str, error_message: str):
         """Update the analysis record with failed status and error log."""
         try:
-            await self.db.documentanalysis.update(
+            await db.documentanalysis.update(
                 where={"id": analysis_id},
                 data={
                     "status": "FAILED",
