@@ -20,6 +20,8 @@ ocr_image = (
         "pillow==10.1.0",
         "numpy==1.24.3",
         "opencv-python-headless==4.8.1.78",
+        "PyMuPDF==1.23.8",  # For PDF processing
+        "fastapi[standard]==0.115.4",
     )
 )
 
@@ -275,6 +277,146 @@ class PaddleOCR:
             "average_confidence": avg_confidence,
             "errors": errors if errors else None
         }
+    
+    @modal.method()
+    def extract_text_from_pdf(self, pdf_bytes: bytes) -> dict:
+        """
+        Extract text from a PDF file using OCR
+        
+        Args:
+            pdf_bytes: PDF file content as bytes
+            
+        Returns:
+            dict with 'combined_text', 'total_pages', 'total_lines', and 'average_confidence' keys
+        """
+        import numpy as np
+        from PIL import Image
+        import fitz  # PyMuPDF
+        
+        all_texts = []
+        all_confidences = []
+        total_lines = 0
+        errors = []
+        total_pages = 0
+        
+        try:
+            # Open PDF from bytes
+            pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
+            total_pages = len(pdf_document)
+            
+            print(f"Processing PDF with {total_pages} pages...")
+            
+            for page_num in range(len(pdf_document)):
+                page = pdf_document[page_num]
+                
+                try:
+                    # Render page to image at higher resolution for better OCR
+                    # zoom=2.0 gives 144 DPI (default is 72 DPI)
+                    mat = fitz.Matrix(2.0, 2.0)
+                    pix = page.get_pixmap(matrix=mat)
+                    
+                    # Convert pixmap to PIL Image
+                    img_bytes = pix.tobytes("png")
+                    image = Image.open(io.BytesIO(img_bytes))
+                    
+                    # Convert to RGB if necessary
+                    if image.mode != 'RGB':
+                        image = image.convert('RGB')
+                    
+                    # Convert PIL Image to numpy array
+                    image_array = np.array(image)
+                    
+                    # Perform OCR
+                    print(f"Processing page {page_num + 1}/{len(pdf_document)}...")
+                    ocr_results = self.ocr_engine.ocr(image_array, cls=True)
+                    
+                    if not ocr_results or not ocr_results[0]:
+                        continue
+                    
+                    texts = []
+                    confidences = []
+                    
+                    for line in ocr_results[0]:
+                        if line:
+                            text = line[1][0]
+                            confidence = line[1][1]
+                            texts.append(text)
+                            confidences.append(confidence)
+                    
+                    if texts:
+                        combined_text = " ".join(texts)
+                        all_texts.append(f"--- Page {page_num + 1} ---\n{combined_text}")
+                        all_confidences.extend(confidences)
+                        total_lines += len(texts)
+                        
+                except Exception as e:
+                    errors.append(f"Page {page_num + 1}: {str(e)}")
+            
+            pdf_document.close()
+            
+            combined_text = "\n\n".join(all_texts) if all_texts else ""
+            avg_confidence = sum(all_confidences) / len(all_confidences) if all_confidences else 0.0
+            
+            return {
+                "combined_text": combined_text,
+                "total_pages": total_pages,
+                "total_lines": total_lines,
+                "average_confidence": avg_confidence,
+                "errors": errors if errors else None
+            }
+            
+        except Exception as e:
+            return {
+                "combined_text": "",
+                "total_pages": 0,
+                "total_lines": 0,
+                "average_confidence": 0.0,
+                "errors": [f"PDF processing error: {str(e)}"]
+            }
+
+
+@app.function(image=ocr_image)
+@modal.asgi_app()
+def fastapi_app():
+    """Serve the FastAPI app with OCR endpoints"""
+    from fastapi import FastAPI, File, UploadFile, HTTPException
+    from fastapi.responses import JSONResponse
+    
+    web_app = FastAPI(title="PaddleOCR Service")
+    
+    # Initialize OCR instance
+    ocr_instance = PaddleOCR()
+    
+    @web_app.post("/extract-text-from-pdf")
+    async def extract_text_from_pdf_endpoint(file: UploadFile = File(...)):
+        """
+        HTTP endpoint to extract text from a PDF file using OCR.
+        
+        Args:
+            file: PDF file uploaded via multipart/form-data
+            
+        Returns:
+            JSON with combined_text, total_pages, total_lines, average_confidence, and errors
+        """
+        try:
+            # Read the uploaded file
+            pdf_bytes = await file.read()
+            
+            # Validate it's a PDF
+            if not file.filename.lower().endswith('.pdf'):
+                raise HTTPException(status_code=400, detail="Only PDF files are supported")
+            
+            # Call the OCR method
+            result = ocr_instance.extract_text_from_pdf.remote(pdf_bytes=pdf_bytes)
+            
+            return JSONResponse(content=result)
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"OCR processing failed: {str(e)}")
+    
+    return web_app
 
 
 @app.local_entrypoint()

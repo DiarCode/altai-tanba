@@ -108,38 +108,55 @@ RESPONSE FORMAT: fraud_summary1; fraud_summary2; fraud_summary3"""
             raise Exception(f"Fraud detection failed: {str(e)}")
 
     async def _detect_mistakes(self, client: httpx.AsyncClient, text: str) -> List[str]:
-        """Detect spelling mistakes in the text."""
-        prompt = f"""INSTRUCTIONS: You are an assistant that determines spelling problems in the text and should send back list of words that has problems. Return ONLY the misspelled words separated by semicolons (;). If no mistakes are found, return an empty string.
+        """Generate improvement suggestions for the document."""
+        prompt = f"""ИНСТРУКЦИЯ: Вы помощник, который анализирует документы и предлагает улучшения. Проанализируйте следующий текст и дайте ровно 3 конкретные рекомендации по улучшению документа. Каждая рекомендация должна быть одним предложением на русском языке.
 
-EXAMPLE:
-Input: "Ппривет, меня зовут Алексей, а вас как завут?"
-Response: "Ппривет; завут"
+Опишите ОБЩИЕ проблемы документа, такие как:
+- Качество распознавания текста (если есть ошибки OCR)
+- Орфографические и грамматические ошибки (в целом)
+- Проблемы со структурой документа
+- Неясные формулировки
+- Полнота информации
+- Профессиональное оформление
 
-TEXT FOR ANALYSIS:
+ВАЖНО: НЕ нумеруйте рекомендации. НЕ пишите "Рекомендация 1", "Рекомендация 2" и т.д. НЕ перечисляйте конкретные ошибки. Верните ТОЛЬКО сами рекомендации, разделенные точкой с запятой (;).
+
+ПРИМЕР ПРАВИЛЬНОГО ОТВЕТА:
+Необходимо улучшить качество распознавания текста; Рекомендуется провести корректуру для устранения орфографических ошибок; Следует упорядочить структуру документа для лучшей читаемости
+
+ТЕКСТ ДЛЯ АНАЛИЗА:
 {text}
 
-RESPONSE FORMAT: word1; word2; word3"""
+ОТВЕТ (только рекомендации через точку с запятой):"""
 
         try:
             response = await client.post(
                 f"{self.base_url}/chat",
                 json={
                     "prompt": prompt,
-                    "max_tokens": 2048,
+                    "max_tokens": 512,
                     "temperature": 0.3
                 }
             )
             response.raise_for_status()
             
             result = response.json()
-            mistakes_text = result.get("response", "").strip()
+            improvements = result.get("response", "").strip()
             
-            # Parse the semicolon-separated list
-            if not mistakes_text:
-                return []
+            # Split by semicolon and return as array
+            if not improvements:
+                return ["Рекомендации по улучшению документа отсутствуют"]
             
-            words = [w.strip() for w in mistakes_text.split(";") if w.strip()]
-            return words
+            # Split by semicolon, strip each sentence, and filter empty ones
+            sentences = [s.strip() for s in improvements.split(";") if s.strip()]
+            
+            # Ensure we have exactly 3 recommendations
+            if len(sentences) < 3:
+                sentences.extend(["Дополнительные рекомендации отсутствуют"] * (3 - len(sentences)))
+            elif len(sentences) > 3:
+                sentences = sentences[:3]
+            
+            return sentences
             
         except Exception as e:
             raise Exception(f"Mistake detection failed: {str(e)}")
@@ -173,13 +190,13 @@ RESPONSE FORMAT: Single word or short phrase representing the document type (e.g
             raise Exception(f"Document classification failed: {str(e)}")
 
     async def _generate_summary(self, client: httpx.AsyncClient, text: str) -> str:
-        """Generate a brief summary of the document."""
-        prompt = f"""INSTRUCTIONS: You are an assistant that creates brief summaries of documents. Analyze the following document text and provide a concise summary describing what this document is about. The summary should be 2-3 sentences maximum and capture the main purpose and content of the document. Return ONLY the summary text.
+        """Generate a brief summary of the document in Russian."""
+        prompt = f"""ИНСТРУКЦИЯ: Вы помощник, который создает краткие описания документов. Проанализируйте следующий текст документа и предоставьте краткое описание на русском языке, описывающее содержание и назначение этого документа. Описание должно быть максимум 2-3 предложения и отражать основную цель и содержание документа. Верните ТОЛЬКО текст описания на русском языке.
 
-DOCUMENT:
+ДОКУМЕНТ:
 {text}
 
-RESPONSE FORMAT: A brief summary of the document (2-3 sentences)"""
+ФОРМАТ ОТВЕТА: Краткое описание документа на русском языке (2-3 предложения)"""
 
         try:
             response = await client.post(

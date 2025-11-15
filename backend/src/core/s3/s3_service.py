@@ -75,6 +75,34 @@ class S3Service:
         except Exception as e:
             raise Exception(f"Error downloading document images: {str(e)}")
 
+    async def download_original_pdf(self, document_id: str) -> bytes:
+        """
+        Download the original PDF from MinIO.
+        
+        Args:
+            document_id: The document ID
+            
+        Returns:
+            PDF file as bytes
+            
+        Raises:
+            Exception: If download fails
+        """
+        try:
+            key = f"{document_id}/original.pdf"
+            
+            # Download the PDF
+            file_obj = io.BytesIO()
+            self.client.download_fileobj(self.bucket, key, file_obj)
+            file_obj.seek(0)
+            
+            return file_obj.read()
+            
+        except ClientError as e:
+            raise Exception(f"Failed to download PDF from S3: {str(e)}")
+        except Exception as e:
+            raise Exception(f"Error downloading PDF: {str(e)}")
+
     async def upload_file(self, file_bytes: bytes, key: str, content_type: str = 'application/octet-stream') -> str:
         """
         Upload a file to S3.
