@@ -4,14 +4,15 @@ import uuid
 from pathlib import Path
 from typing import Dict, List
 
-from prisma import Prisma
+from prisma import Prisma, Json
 
 from src.core.s3 import S3Client, MockS3Client
 from src.core.config.settings import settings
 from src.modules.mark_service.services.document_processor import DigitalInspectorProcessor
 from src.modules.mark_service.utils import build_labeled_pdf, draw_boxes_on_page, yolo_results_to_detections
+from src.modules.mark_service.formatters import build_challenge_json
 from src.core.utils.pdf import pdf_to_images
-from src.modules.sessions.labels_payload import DetectionOut, DocumentArtifacts, LabelsPositionPayload, PageArtifacts
+from src.modules.sessions.labels_payload import DetectionOut, PageArtifacts
 from src.modules.text_service.client import trigger_document_ocr
 
 
@@ -51,7 +52,7 @@ async def process_document_async(session_id: int, document_id: int, file_path: P
 
         # 5) Inference
         page_dets_raw = processor.run_inference_on_pages(pages, conf_thres=0.25)
-        # Convert to DetectionOut (camelCase)
+        # Convert to DetectionOut (camelCase) for local flags only
         page_dets: Dict[int, List[DetectionOut]] = {}
         has_qr = has_stamp = has_signature = False
         for idx, dets in page_dets_raw.items():
@@ -88,20 +89,30 @@ async def process_document_async(session_id: int, document_id: int, file_path: P
         labeled_pdf_key = f"sessions/{session_id}/documents/{document_id}/labeled/labeled.pdf"
         labeled_pdf_url = s3.upload_file(str(labeled_pdf_path), labeled_pdf_key)
 
-        payload = LabelsPositionPayload(
-            artifacts=DocumentArtifacts(
-                originalPdfUrl=original_url,
-                labeledPdfUrl=labeled_pdf_url,
-                pages=labeled_pages,
-            ),
-            detections=page_dets,
-        )
+        # Build expected challenge JSON
+        doc_record = await db.sessiondocument.find_unique(where={"id": document_id})
+        pdf_name = doc_record.originalName if doc_record and doc_record.originalName else file_path.name
+
+        def _safe_graphql_key(name: str) -> str:
+            # GraphQL input object fields must match /^[_A-Za-z][_0-9A-Za-z]*$/
+            import re, uuid as _uuid
+            key = re.sub(r"[^0-9A-Za-z_]", "_", name)
+            if not key or not (key[0].isalpha() or key[0] == "_"):
+                key = f"k_{key}" if key else f"k_{_uuid.uuid4().hex}"
+            return key
+
+        safe_key = _safe_graphql_key(pdf_name)
+        challenge_json = build_challenge_json(safe_key, pages, page_dets_raw)
+        # Preserve original filename inside payload
+        if safe_key in challenge_json and isinstance(challenge_json[safe_key], dict):
+            challenge_json[safe_key]["original_name"] = pdf_name
 
         # 7) Persist to DB
         await db.sessiondocument.update(
             where={"id": document_id},
             data={
-                "labelsPosition": payload.model_dump(),
+                # Use Prisma Json wrapper to ensure proper GraphQL Json handling
+                "labelsPosition": Json(challenge_json),
                 "hasSignature": has_signature,
                 "hasQR": has_qr,
                 "hasStamp": has_stamp,

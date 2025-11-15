@@ -22,7 +22,7 @@ router = APIRouter()
 WORK_ROOT = Path.cwd() / "work_dir"
 
 
-@router.get("/", response_model=List[SessionDTO])
+@router.get("", response_model=List[SessionDTO])
 async def list_sessions(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
@@ -98,8 +98,19 @@ async def get_session_document(session_id: int, doc_id: int) -> SessionDocumentD
 
 
 @router.post("/", response_model=SessionDTO)
-async def create_session(background: BackgroundTasks, files: List[UploadFile] = File(...)) -> SessionDTO:
-    session_id = await create_session_with_documents(files, background, WORK_ROOT)
+@router.post("", response_model=SessionDTO)
+async def create_session(
+    background: BackgroundTasks,
+    files: List[UploadFile] | None = File(default=None),
+    file: UploadFile | None = File(default=None),
+) -> SessionDTO:
+    # Accept either `files` (multiple) or `file` (single) for Postman friendliness
+    incoming: List[UploadFile] = []
+    if files:
+        incoming.extend(files)
+    if file:
+        incoming.append(file)
+    session_id = await create_session_with_documents(incoming, background, WORK_ROOT)
     # Return session base data
     db = Prisma()
     await db.connect()

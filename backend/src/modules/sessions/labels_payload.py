@@ -28,7 +28,8 @@ class DocumentArtifacts(BaseModel):
 
 class LabelsPositionPayload(BaseModel):
     artifacts: DocumentArtifacts
-    detections: Dict[int, List[DetectionOut]]
+    # Use string keys to ensure GraphQL-safe JSON object keys when persisting
+    detections: Dict[str, List[DetectionOut]]
 
 
 # Constants to avoid stringly-typed access
