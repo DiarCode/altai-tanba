@@ -2,18 +2,19 @@ import { isAxiosError } from 'axios'
 
 import { apiClient } from '@/core/config/axios-instance.config'
 
-import type {
-  DocumentAnalysisStatusDto,
-  LabelsDetection,
-  LabelsPositionPayload,
-  ListSessionsParams,
-  RawLabelsAnnotation,
-  RawLabelsPagePayload,
-  RawLabelsPositionPayload,
-  SessionDocumentDetailsDto,
-  SessionDocumentDto,
-  SessionDocumentsQueryParams,
-  SessionDto,
+import {
+  CATEGORIES_FORMATTED,
+  type DocumentAnalysisStatusDto,
+  type LabelsDetection,
+  type LabelsPositionPayload,
+  type ListSessionsParams,
+  type RawLabelsAnnotation,
+  type RawLabelsPagePayload,
+  type RawLabelsPositionPayload,
+  type SessionDocumentDetailsDto,
+  type SessionDocumentDto,
+  type SessionDocumentsQueryParams,
+  type SessionDto,
 } from '../models/session.models'
 
 export class SessionServiceError extends Error {
@@ -126,9 +127,7 @@ class SessionService {
     }
   }
 
-  private normalizeDocumentDetails(
-    raw: SessionDocumentDetailsResponse,
-  ): SessionDocumentDetailsDto {
+  private normalizeDocumentDetails(raw: SessionDocumentDetailsResponse): SessionDocumentDetailsDto {
     return {
       ...raw,
       labelsPosition: this.normalizeLabelsPosition(raw.labelsPosition),
@@ -191,16 +190,18 @@ class SessionService {
       return null
     }
 
-    const { bbox, category, area } = annotation
+    const { bbox, category, area, confidence } = annotation
+
+    const normalizedCategory = CATEGORIES_FORMATTED[category as keyof typeof CATEGORIES_FORMATTED]
 
     return {
-      category,
+      category: normalizedCategory,
       area,
       x: bbox.x / width,
       y: bbox.y / height,
       width: bbox.width / width,
       height: bbox.height / height,
-      confidence: 1,
+      confidence: Math.round(confidence * 100) / 100,
     }
   }
 

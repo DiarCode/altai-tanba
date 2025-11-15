@@ -122,10 +122,10 @@ const analysisSummary = computed(
     analysisData.value?.documentSummary ??
     'Результаты анализа появятся сразу после завершения обработки документа.',
 )
-const analysisMistakes = computed(() => analysisData.value?.mistakeWords ?? [])
+const analysisMistakes = computed(() => analysisData.value?.message ?? [])
 const analysisFrauds = computed(() => analysisData.value?.fraudSentences ?? [])
 const analysisDocumentType = computed(
-  () => analysisData.value?.documentType ?? documentData.value?.originalName ?? 'Документ',
+  () => analysisData.value?.message ?? documentData.value?.originalName ?? 'Документ',
 )
 const analysisStatus = computed(
   () => analysisData.value?.status ?? DocumentAnalysisState.PROCESSING,
@@ -133,21 +133,6 @@ const analysisStatus = computed(
 const isAnalysisProcessing = computed(
   () => analysisStatus.value === DocumentAnalysisState.PROCESSING,
 )
-const analysisErrorMessage = computed(
-  () => analysisData.value?.errorLog ?? analysisData.value?.message ?? null,
-)
-const analysisStatusMeta = computed(() => {
-  switch (analysisStatus.value) {
-    case DocumentAnalysisState.COMPLETED:
-      return { label: 'Анализ завершён', color: 'bg-emerald-400' }
-    case DocumentAnalysisState.FAILED:
-      return { label: 'Ошибка анализа', color: 'bg-rose-400' }
-    case DocumentAnalysisState.NOT_FOUND:
-      return { label: 'Анализ не найден', color: 'bg-slate-500' }
-    default:
-      return { label: 'Анализируется', color: 'bg-amber-300' }
-  }
-})
 
 function formatDate(dateString: string) {
   const date = new Date(dateString)
@@ -174,14 +159,6 @@ function getCategoryColor(category: string) {
   if (cat.includes('stamp') || cat.includes('печать')) return '#3DD68C'
   if (cat.includes('sign') || cat.includes('подп')) return '#FBBF24'
   return '#F97066'
-}
-
-function getCategoryIcon(category: string) {
-  const cat = category.toLowerCase()
-  if (cat.includes('qr')) return QrCode
-  if (cat.includes('stamp') || cat.includes('печать')) return Stamp
-  if (cat.includes('sign') || cat.includes('подп')) return PenTool
-  return AlertTriangle
 }
 
 function onPrevPage() {
@@ -221,6 +198,25 @@ function handleDownloadLabeled() {
   if (url) {
     window.open(url, '_blank')
   }
+}
+
+function handleDownloadJSON() {
+  const payload = documentData.value?.labelsPosition
+  if (!payload) {
+    return
+  }
+
+  const fileName =
+    `${documentData.value?.originalName ?? 'document'}`.replace(/\s+/g, '_') + '-labels.json'
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 const question = ref('')
@@ -307,17 +303,11 @@ watch(
               <span>{{ formatDate(documentData.updatedAt) }}</span>
             </div>
 
-            <div class="flex flex-col items-end gap-1 text-xs text-slate-400">
-              <div class="flex items-center gap-2">
-                <span class="flex items-center gap-1 rounded-full bg-white/5 px-2 py-1">
-                  <span class="h-1.5 w-1.5 rounded-full" :class="analysisStatusMeta.color" />
-                  {{ analysisStatusMeta.label }}
-                </span>
-              </div>
-              <span v-if="analysisErrorMessage" class="text-rose-300">
-                {{ analysisErrorMessage }}
-              </span>
-            </div>
+            <Button @click="handleDownloadJSON" variant="outline">
+              <Download />
+
+              JSON
+            </Button>
 
             <div class="flex items-center gap-3">
               <!-- Sheet trigger for document details -->
@@ -394,9 +384,6 @@ watch(
                       </form>
                       <p v-if="isAnalysisProcessing" class="text-xs text-amber-300">
                         Аналитика всё ещё считается, данные обновляются автоматически.
-                      </p>
-                      <p v-else-if="analysisErrorMessage" class="text-xs text-rose-300">
-                        {{ analysisErrorMessage }}
                       </p>
                     </div>
 
@@ -675,10 +662,6 @@ watch(
                         class="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[rgba(5,8,20,0.95)] px-2 py-0.5 text-[10px] font-medium shadow-lg"
                         :style="{ color: getCategoryColor(det.category) }"
                       >
-                        <component
-                          :is="getCategoryIcon(det.category)"
-                          class="inline h-3 w-3 mr-1 align-middle"
-                        />
                         {{ det.category }}
                         <span class="ml-1 text-[8px] opacity-75">
                           {{ Math.round(det.confidence * 100) }}%

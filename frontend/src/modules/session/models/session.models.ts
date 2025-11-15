@@ -1,3 +1,9 @@
+export const CATEGORIES_FORMATTED = {
+  signature: 'Подпись',
+  stamp: 'Печать',
+  qr: 'QR',
+}
+
 export enum SessionStatus {
   PROCESSING = 'PROCESSING',
   FAILED = 'FAILED',
@@ -77,6 +83,7 @@ export interface RawLabelsAnnotation {
   area: number
   bbox: RawLabelsAnnotationBBox
   category: string
+  confidence: number
 }
 
 export type RawLabelsAnnotationRecord = Record<string, RawLabelsAnnotation>

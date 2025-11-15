@@ -5,7 +5,6 @@ import { Button } from '@/core/components/ui/button'
 import HomeNavbar from '@/modules/home/components/home-navbar.vue'
 import { useSession, useSessionDocuments } from '@/modules/session/composables/session.composables'
 import type { SessionDocumentDto } from '@/modules/session/models/session.models'
-import { useColorMode } from '@vueuse/core'
 import {
   ArrowLeft,
   Download,
