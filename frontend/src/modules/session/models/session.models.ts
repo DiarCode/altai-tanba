@@ -66,6 +66,39 @@ export interface SessionDocumentDetailsDto extends SessionDocumentDto {
   labelsPosition?: LabelsPositionPayload | null
 }
 
+export interface RawLabelsAnnotationBBox {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface RawLabelsAnnotation {
+  area: number
+  bbox: RawLabelsAnnotationBBox
+  category: string
+}
+
+export type RawLabelsAnnotationRecord = Record<string, RawLabelsAnnotation>
+
+export interface RawLabelsPagePayload {
+  page_size: {
+    width: number
+    height: number
+  }
+  annotations: RawLabelsAnnotationRecord[]
+}
+
+export type RawLabelsPositionDocument = Record<
+  string,
+  RawLabelsPagePayload | LabelsArtifacts | string | undefined
+> & {
+  artifacts?: LabelsArtifacts
+  original_name?: string
+}
+
+export type RawLabelsPositionPayload = Record<string, RawLabelsPositionDocument>
+
 export interface ListSessionsParams {
   page?: number
   size?: number

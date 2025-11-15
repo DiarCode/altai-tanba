@@ -58,13 +58,13 @@ async def process_document_async(session_id: int, document_id: int, file_path: P
             page_urls[p.index] = url
 
         # 4) Trigger document analysis with unified key (numeric document id)
-        try:
-            await document_analysis_service.analyze_document(document_id)
-        except Exception as _e:
-            # Non-fatal for labels pipeline; analysis status is tracked separately
-            print(f"[ANALYSIS] Document {document_id} analysis failed: {_e}")
+        # try:
+        #     await document_analysis_service.analyze_document(document_id)
+        # except Exception as _e:
+        #     # Non-fatal for labels pipeline; analysis status is tracked separately
+        #     print(f"[ANALYSIS] Document {document_id} analysis failed: {_e}")
 
-        # 5) Inference
+         # 5) Inference
         page_dets_raw = processor.run_inference_on_pages(pages, conf_thres=0.25)
         # Convert to DetectionOut (camelCase) for local flags only
         page_dets: Dict[int, List[DetectionOut]] = {}

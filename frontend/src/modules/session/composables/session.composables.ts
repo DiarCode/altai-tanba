@@ -3,6 +3,7 @@ import { type MaybeRef, computed, unref } from 'vue'
 
 import {
   DocumentAnalysisState,
+  type DocumentAnalysisStatusDto,
   type ListSessionsParams,
   type SessionDocumentsQueryParams,
   type SessionDto,
@@ -108,11 +109,24 @@ export function useDocumentAnalysisStatus(
       if (!resolvedDocumentId.value) {
         throw new SessionServiceError('Не найден идентификатор документа.')
       }
-      return sessionService.getDocumentAnalysisStatus(resolvedDocumentId.value)
+      return sessionService
+        .getDocumentAnalysisStatus(resolvedDocumentId.value)
+        .catch((error) => {
+          console.warn('[sessions] document analysis unavailable', error)
+          return {
+            status: DocumentAnalysisState.NOT_FOUND,
+            documentId: String(resolvedDocumentId.value),
+            message:
+              error instanceof SessionServiceError
+                ? error.message
+                : 'Сервис анализа временно недоступен.',
+          } satisfies DocumentAnalysisStatusDto
+        })
     },
     enabled: computed(() => Boolean(resolvedDocumentId.value) && resolvedEnabled.value),
     refetchInterval: (query) =>
       query.state.data?.status === DocumentAnalysisState.PROCESSING ? 5000 : false,
+    retry: false,
   })
 }
 

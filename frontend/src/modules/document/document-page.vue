@@ -56,9 +56,7 @@ const documentData = computed<SessionDocumentDetailsDto | null>(
 )
 const analysisData = computed(() => analysisQuery.data.value ?? null)
 
-const isLoading = computed(
-  () => documentQuery.isLoading.value || analysisQuery.isLoading.value,
-)
+const isLoading = computed(() => documentQuery.isLoading.value || analysisQuery.isLoading.value)
 const hasData = computed(() => !!documentData.value)
 
 const activePageIndex = ref(0)
@@ -69,7 +67,7 @@ const showSignature = ref(true)
 const showStamp = ref(true)
 
 const labelsPayload = computed(() => documentData.value?.labelsPosition ?? null)
-const pageArtifacts = computed(() => labelsPayload.value?.artifacts.pages ?? [])
+const pageArtifacts = computed(() => labelsPayload.value?.artifacts?.pages ?? [])
 const currentPage = computed<LabelsPageArtifact | null>(
   () => pageArtifacts.value[activePageIndex.value] ?? null,
 )
@@ -211,7 +209,7 @@ function resetZoom() {
 }
 
 function handleDownloadOriginal() {
-  const url = documentData.value?.documentUrl ?? labelsPayload.value?.artifacts.originalPdfUrl
+  const url = documentData.value?.documentUrl ?? labelsPayload.value?.artifacts?.originalPdfUrl
   if (url) {
     window.open(url, '_blank')
   }
@@ -219,7 +217,7 @@ function handleDownloadOriginal() {
 
 function handleDownloadLabeled() {
   const url =
-    documentData.value?.labeledDocumentUrl ?? labelsPayload.value?.artifacts.labeledPdfUrl
+    documentData.value?.labeledDocumentUrl ?? labelsPayload.value?.artifacts?.labeledPdfUrl
   if (url) {
     window.open(url, '_blank')
   }
@@ -311,9 +309,7 @@ watch(
 
             <div class="flex flex-col items-end gap-1 text-xs text-slate-400">
               <div class="flex items-center gap-2">
-                <span
-                  class="flex items-center gap-1 rounded-full bg-white/5 px-2 py-1"
-                >
+                <span class="flex items-center gap-1 rounded-full bg-white/5 px-2 py-1">
                   <span class="h-1.5 w-1.5 rounded-full" :class="analysisStatusMeta.color" />
                   {{ analysisStatusMeta.label }}
                 </span>
@@ -473,11 +469,7 @@ watch(
                           >
                         </div>
                         <ul class="space-y-2 text-base text-slate-200">
-                          <li
-                            v-for="(m, idx) in analysisMistakes"
-                            :key="idx"
-                            class="flex gap-2"
-                          >
+                          <li v-for="(m, idx) in analysisMistakes" :key="idx" class="flex gap-2">
                             <span
                               class="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-300"
                             />
@@ -588,7 +580,7 @@ watch(
                   :style="{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center' }"
                 >
                   <img
-                    :src="currentPage.labeledImageUrl ?? currentPage.imageUrl"
+                    :src="currentPage.imageUrl"
                     :alt="`Page ${currentPage.pageIndex + 1}`"
                     class="block max-h-full max-w-full object-contain"
                   />
