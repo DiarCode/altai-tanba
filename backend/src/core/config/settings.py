@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     S3_AUDIO_PREFIX: str
     S3_PATH_STYLE: bool
 
+    # ---------- LLM / Modal Labs ----------
+    MODAL_LLM_ENDPOINT: str
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

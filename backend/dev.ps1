@@ -1,5 +1,8 @@
 $ErrorActionPreference = "Stop"
 
+# Force UTF-8 encoding for Python (fixes Prisma schema.prisma Unicode issues on Windows)
+$env:PYTHONUTF8 = "1"
+
 # 1. Активируем виртуальное окружение, если есть .venv
 if (Test-Path ".\.venv\Scripts\Activate.ps1") {
     Write-Host "Activating virtual environment .venv..."
