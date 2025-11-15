@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     SECURITY_BACKEND_CORS_ORIGINS: str
     SECURITY_ALLOWED_HOSTS: str
     SERVER_PORT: int
-    USE_STUB_ADAPTER: bool
+    USE_STUB_ADAPTER: bool = False
 
     # ---------- S3 / MinIO ----------
     S3_ACCESS_ENDPOINT: str

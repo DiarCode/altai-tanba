@@ -34,13 +34,19 @@ class S3Client:
         )
         self.bucket = bucket or settings.S3_BUCKET
 
-        # Ensure bucket exists
+        # Ensure bucket exists (create if missing)
         try:
             if not self.client.bucket_exists(self.bucket):
-                self.client.make_bucket(self.bucket)
-        except S3Error:
-            # Ignore bucket creation race or perms issues here; uploads may still work
-            pass
+                location = settings.S3_REGION or None
+                try:
+                    self.client.make_bucket(self.bucket, location=location)
+                except S3Error as e:
+                    # Bucket may already exist (race) or location constraint mismatch
+                    # Re-check existence before surfacing
+                    if not self.client.bucket_exists(self.bucket):
+                        raise
+        except S3Error as e:
+            print(f"[S3] Bucket check/create failed: {e}")
 
     def upload_file(self, local_path: str, remote_key: str) -> str:
         object_name = remote_key.lstrip("/")
@@ -56,5 +62,6 @@ class MockS3Client:
         self.bucket = bucket
 
     def upload_file(self, local_path: str, remote_key: str) -> str:
-        print(f"[S3 MOCK] Upload {local_path} -> s3://{self.bucket}{remote_key}")
-        return f"s3://{self.bucket}{remote_key}"
+        object_name = remote_key.lstrip("/")
+        print(f"[S3 MOCK] Upload {local_path} -> s3://{self.bucket}/{object_name}")
+        return f"s3://{self.bucket}/{object_name}"
