@@ -25,12 +25,12 @@ IMG_SIZE = 640
 BATCH_SIZE = 8  # YOLO internal batch
 
 
-from core.utils.pdf import pdf_to_images
-from modules.mark_service.types import PageImage, Detection
-from modules.mark_service.utils import yolo_results_to_detections, build_labeled_pdf
-from modules.mark_service.formatters import build_challenge_json
-from core.s3 import S3Client, MockS3Client
-from core.config.settings import settings
+from src.core.utils.pdf import pdf_to_images
+from src.modules.mark_service.types import PageImage, Detection
+from src.modules.mark_service.utils import yolo_results_to_detections, build_labeled_pdf
+from src.modules.mark_service.formatters import build_challenge_json
+from src.core.s3 import S3Client, MockS3Client
+from src.core.config.settings import settings
 
 class DigitalInspectorProcessor:
     def __init__(self, s3_client=None):
