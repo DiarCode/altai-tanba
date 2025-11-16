@@ -59,31 +59,25 @@ class DocumentAnalysisService:
             analysis_id = analysis.id
             print(f"[DEBUG] Analysis record created in {time.time() - start:.2f}s")
             
-            # Step 2: Resolve S3 prefix from DB and download images from MinIO
-            doc = await db.sessiondocument.find_unique(where={"id": doc_int})
-            if not doc:
-                await db._update_failed_status(analysis_id, f"Document not found: {doc_int}")
-                raise Exception(f"Document not found: {doc_int}")
-
-            prefix = f"sessions/{doc.sessionId}/documents/{doc.id}"
+            # Step 2: Download original PDF from MinIO
             try:
-                print(f"[DEBUG] Downloading images from S3...")
+                print(f"[DEBUG] Downloading original PDF from S3...")
                 start = time.time()
-                images = await s3_service.download_document_images(prefix)
-                print(f"[DEBUG] Images downloaded in {time.time() - start:.2f}s")
+                pdf_bytes = await s3_service.download_original_pdf(document_id)
+                print(f"[DEBUG] PDF downloaded in {time.time() - start:.2f}s")
             except Exception as e:
-                error_msg = f"Failed to download images: {str(e)}"
+                error_msg = f"Failed to download PDF: {str(e)}"
                 await self._update_failed_status(db, analysis_id, error_msg)
                 raise Exception(error_msg)
             
-            # Step 3: Extract text from images using OCR
+            # Step 3: Extract text from PDF using OCR
             try:
-                print(f"[DEBUG] Extracting text with OCR...")
+                print(f"[DEBUG] Extracting text from PDF with OCR...")
                 start = time.time()
-                extracted_text = await ocr_service.extract_text_from_images(images)
+                extracted_text = await ocr_service.extract_text_from_pdf(pdf_bytes)
                 print(f"[DEBUG] Text extracted in {time.time() - start:.2f}s")
             except Exception as e:
-                error_msg = f"Failed to extract text from images: {str(e)}"
+                error_msg = f"Failed to extract text from PDF: {str(e)}"
                 await self._update_failed_status(db, analysis_id, error_msg)
                 raise Exception(error_msg)
             
