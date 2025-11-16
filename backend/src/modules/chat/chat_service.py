@@ -21,6 +21,7 @@ class ChatContext(BaseModel):
 	mistake_words: List[str] = Field(default_factory=list, description="Misspelled words")
 	has_stamp: bool = Field(False, description="Whether a stamp was detected")
 	has_signature: bool = Field(False, description="Whether a signature was detected")
+	document_text: str = Field("", description="Full extracted text from the document via OCR")
 
 
 class ChatRequest(BaseModel):
@@ -114,17 +115,8 @@ class ChatService:
 		- Loads analysis and verification signals from DB by document id
 		- Builds single "prompt" string and calls Modal endpoint at /chat
 		"""
-		# TODO: Restore DB-backed context when analysis pipeline is ready
-		# ctx = await self._load_context_from_db(document_id)
-		# For now, use placeholder context without DB
-		ctx = ChatContext(
-			document_summary="",
-			document_type="",
-			fraud_sentences=[],
-			mistake_words=[],
-			has_stamp=False,
-			has_signature=False,
-		)
+		# Load context from database
+		ctx = await self._load_context_from_db(document_id)
 		target_lang = _pick_language(accept_language)
 		system_prompt = self._build_system_prompt(ctx, target_lang)
 		prompt = f"{system_prompt}\n\nUser question: {message.strip()}"
@@ -181,6 +173,7 @@ class ChatService:
 			mistake_words=analysis.mistakeWords or [],
 			has_stamp=bool(session_doc.hasStamp),
 			has_signature=bool(session_doc.hasSignature),
+			document_text=analysis.documentText or "",
 		)
 
 	def _build_system_prompt(self, ctx: ChatContext, target_language: Optional[str]) -> str:
@@ -191,7 +184,17 @@ class ChatService:
 		lines.append(f"Document type: {ctx.document_type}.")
 		lines.append("Document summary:")
 		lines.append(ctx.document_summary.strip())
-		lines.append("Verification signals:")
+		
+		if ctx.document_text:
+			lines.append("\nFull document text (from OCR):")
+			# Limit text to avoid token overflow (e.g., 4000 chars ~1000 tokens)
+			max_text_length = 4000
+			text_preview = ctx.document_text[:max_text_length]
+			if len(ctx.document_text) > max_text_length:
+				text_preview += "... [truncated]"
+			lines.append(text_preview)
+		
+		lines.append("\nVerification signals:")
 		lines.append(f" - Signature present: {'yes' if ctx.has_signature else 'no'}")
 		lines.append(f" - Stamp present: {'yes' if ctx.has_stamp else 'no'}")
 		if ctx.fraud_sentences:
