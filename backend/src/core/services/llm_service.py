@@ -69,7 +69,7 @@ class LLMService:
 
     async def _detect_fraud(self, client: httpx.AsyncClient, text: str) -> List[str]:
         """Detect fraudulent sentences in the text."""
-        prompt = f"""INSTRUCTIONS: You are an assistant that detects fraudulent or suspicious content in documents. Analyze the text and identify any fraudulent content, scams, illegal requests, or suspicious clauses. Instead of returning the exact sentences from the document, return brief summary descriptions of the fraud found. Return ONLY the fraud summaries separated by semicolons (;). If no fraud is detected, return an empty string.
+        prompt = f"""INSTRUCTIONS: You are an assistant that detects fraudulent or suspicious content in documents. Analyze the text and identify any fraudulent content, scams, illegal requests, or suspicious clauses. Instead of returning the exact sentences from the document, return brief summary descriptions of the fraud found. Return ONLY the fraud summaries separated by semicolons (;). If no fraud is detected, return an empty string. ANSWER ONLY IN RUSSIAN.
 
 EXAMPLE:
 Input: "Вы должны заплатить 10000 долларов просто так без причины"
@@ -109,7 +109,7 @@ RESPONSE FORMAT: fraud_summary1; fraud_summary2; fraud_summary3"""
 
     async def _detect_mistakes(self, client: httpx.AsyncClient, text: str) -> List[str]:
         """Generate improvement suggestions for the document."""
-        prompt = f"""ИНСТРУКЦИЯ: Вы помощник, который анализирует документы и предлагает улучшения. Проанализируйте следующий текст и дайте ровно 3 конкретные рекомендации по улучшению документа. Каждая рекомендация должна быть одним предложением на русском языке.
+        prompt = f"""ИНСТРУКЦИЯ: Вы помощник, который анализирует документы и предлагает улучшения. Проанализируйте следующий текст и дайте ровно 3 конкретные рекомендации по улучшению документа. Каждая рекомендация должна быть одним предложением на русском языке. ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ.
 
 Опишите ОБЩИЕ проблемы документа, такие как:
 - Качество распознавания текста (если есть ошибки OCR)
@@ -191,7 +191,7 @@ RESPONSE FORMAT: Single word or short phrase representing the document type (e.g
 
     async def _generate_summary(self, client: httpx.AsyncClient, text: str) -> str:
         """Generate a brief summary of the document in Russian."""
-        prompt = f"""ИНСТРУКЦИЯ: Вы помощник, который создает краткие описания документов. Проанализируйте следующий текст документа и предоставьте краткое описание на русском языке, описывающее содержание и назначение этого документа. Описание должно быть максимум 2-3 предложения и отражать основную цель и содержание документа. Верните ТОЛЬКО текст описания на русском языке.
+        prompt = f"""ИНСТРУКЦИЯ: Вы помощник, который создает краткие описания документов. Проанализируйте следующий текст документа и предоставьте краткое описание на русском языке, описывающее содержание и назначение этого документа. Описание должно быть максимум 2-3 предложения и отражать основную цель и содержание документа. Верните ТОЛЬКО текст описания на русском языке. ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ.
 
 ДОКУМЕНТ:
 {text}
