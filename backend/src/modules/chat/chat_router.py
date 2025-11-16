@@ -2,13 +2,14 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from .chat_service import ChatResponse, chat_service
 
-router = APIRouter(tags=["chat"])
+router = APIRouter(prefix="/chat", tags=["chat"])
+
 
 class ChatQueryRequest(BaseModel):
     message: str
 
 
-@router.post("/chat/{document_id}", response_model=ChatResponse)
+@router.post("/{document_id}", response_model=ChatResponse)
 async def chat(document_id: str, body: ChatQueryRequest, request: Request) -> ChatResponse:
     """Generate an answer for a single user message using DB-backed context.
 

@@ -3,7 +3,11 @@
 import BackgroundImage from '@/core/assets/background-2.jpg'
 import { Button } from '@/core/components/ui/button'
 import HomeNavbar from '@/modules/home/components/home-navbar.vue'
-import { useSession, useSessionDocuments } from '@/modules/session/composables/session.composables'
+import {
+  useSession,
+  useSessionDocuments,
+  useSessionDocumentsLabelsMap,
+} from '@/modules/session/composables/session.composables'
 import type { SessionDocumentDto } from '@/modules/session/models/session.models'
 import {
   ArrowLeft,
@@ -15,7 +19,7 @@ import {
   Stamp,
   XCircle,
 } from 'lucide-vue-next'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -24,10 +28,12 @@ const sessionId = computed(() => route.params.id as string)
 
 const sessionQuery = useSession(sessionId)
 const documentsQuery = useSessionDocuments(sessionId, undefined, { refetchInterval: 5000 })
+const labelsMapQuery = useSessionDocumentsLabelsMap(sessionId, { enabled: false })
 
 const session = computed(() => sessionQuery.data.value ?? null)
 const documents = computed<SessionDocumentDto[]>(() => documentsQuery.data.value ?? [])
 const isLoading = computed(() => sessionQuery.isLoading.value)
+const isDownloadingLabelsMap = ref(false)
 
 const completedCount = computed(() => {
   return documents.value.filter((d) => d.status === 'SUCCESSFUL' || d.status === 'FAILED').length
@@ -61,6 +67,34 @@ function formatDate(dateString: string) {
 function handleDownloadReport() {
   // Заглушка для отчёта по сессии — подставишь свой реальный URL/API
   window.open(`/sessions/${sessionId.value}/report`, '_blank')
+}
+
+async function handleDownloadLabelsMap() {
+  if (isDownloadingLabelsMap.value) return
+  isDownloadingLabelsMap.value = true
+  try {
+    const result = await labelsMapQuery.refetch()
+    const data = result.data
+    if (!data) {
+      return
+    }
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: 'application/json',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `session-${sessionId.value}-labels-map.json`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('[sessions] failed to download labels map', error)
+  } finally {
+    isDownloadingLabelsMap.value = false
+  }
 }
 
 const onDocClick = (docId: string) => {
@@ -207,9 +241,22 @@ const onDocClick = (docId: string) => {
                   </div>
                 </div>
 
-                <Button size="sm" variant="ghost" @click="handleDownloadReport">
-                  <Download class="h-3.5 w-3.5" />
-                </Button>
+                <div class="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    class="gap-1"
+                    :disabled="isDownloadingLabelsMap"
+                    @click="handleDownloadLabelsMap"
+                  >
+                    <Loader2
+                      v-if="isDownloadingLabelsMap"
+                      class="h-3.5 w-3.5 animate-spin text-white"
+                    />
+                    <Download v-else class="h-3.5 w-3.5" />
+                    JSON
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

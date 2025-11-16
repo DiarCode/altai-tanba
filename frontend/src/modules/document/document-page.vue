@@ -10,6 +10,7 @@ import {
 } from '@/core/components/ui/sheet'
 import {
   useDocumentAnalysisStatus,
+  useDocumentChat,
   useSessionDocumentDetails,
 } from '@/modules/session/composables/session.composables'
 import {
@@ -122,10 +123,10 @@ const analysisSummary = computed(
     analysisData.value?.documentSummary ??
     'Результаты анализа появятся сразу после завершения обработки документа.',
 )
-const analysisMistakes = computed(() => analysisData.value?.message ?? [])
+const analysisMistakes = computed(() => analysisData.value?.mistakeWords ?? [])
 const analysisFrauds = computed(() => analysisData.value?.fraudSentences ?? [])
 const analysisDocumentType = computed(
-  () => analysisData.value?.message ?? documentData.value?.originalName ?? 'Документ',
+  () => analysisData.value?.documentType ?? documentData.value?.originalName ?? 'Документ',
 )
 const analysisStatus = computed(
   () => analysisData.value?.status ?? DocumentAnalysisState.PROCESSING,
@@ -220,23 +221,31 @@ function handleDownloadJSON() {
 }
 
 const question = ref('')
-const chatLoading = ref(false)
-const lastQA = ref<{ question: string; answer: string } | null>(null)
+const chatHistory = ref<{ question: string; answer: string }[]>([])
+const chatError = ref<string | null>(null)
+const chatMutation = useDocumentChat(documentId)
+const chatLoading = computed(() => chatMutation.isPending.value)
+const lastQA = computed(() => chatHistory.value[0] ?? null)
 
 async function handleAskQuestion() {
-  if (!question.value.trim() || !analysisSummary.value || isAnalysisProcessing.value) return
+  if (!question.value.trim() || isAnalysisProcessing.value || chatLoading.value) return
+
   const q = question.value.trim()
   question.value = ''
-  chatLoading.value = true
+  chatError.value = null
+  const language = typeof navigator !== 'undefined' ? navigator.language : undefined
 
-  const baseSummary = analysisSummary.value
-  const answer =
-    `На основе анализа документа: ${baseSummary.slice(0, 220)}... ` +
-    `Все ответы носят ознакомительный характер, проверьте критичные моменты вручную.`
-
-  await new Promise((r) => setTimeout(r, 600))
-  lastQA.value = { question: q, answer }
-  chatLoading.value = false
+  try {
+    const response = await chatMutation.mutateAsync({
+      message: q,
+      language,
+    })
+    chatHistory.value = [{ question: q, answer: response.answer }, ...chatHistory.value]
+  } catch (error) {
+    console.error('[chat] failed to send message', error)
+    chatError.value =
+      error instanceof Error ? error.message : 'Не удалось получить ответ. Попробуйте ещё раз.'
+  }
 }
 
 function goBack() {
@@ -247,6 +256,16 @@ function retryLoad() {
   documentQuery.refetch()
   analysisQuery.refetch()
 }
+
+watch(
+  () => documentId.value,
+  () => {
+    chatHistory.value = []
+    chatError.value = null
+    question.value = ''
+    chatMutation.reset()
+  },
+)
 
 watch(
   () => pageArtifacts.value.length,
@@ -342,13 +361,11 @@ watch(
                         class="space-y-2 rounded-[12px] bg-slate-950/80 p-3 text-sm"
                       >
                         <div class="text-sky-200">
-                          <span class="text-[11px] uppercase tracking-wide text-slate-400">
-                            Вы:
-                          </span>
+                          <span class="text-[11px] tracking-wide text-slate-400"> Вы: </span>
                           <p class="mt-1">{{ lastQA.question }}</p>
                         </div>
                         <div class="mt-1 border-t border-slate-800 pt-2 text-slate-200">
-                          <span class="text-[11px] uppercase tracking-wide text-slate-500">
+                          <span class="text-[11px] tracking-wide text-slate-500">
                             Ответ ассистента:
                           </span>
                           <p class="mt-1">
@@ -385,6 +402,9 @@ watch(
                       <p v-if="isAnalysisProcessing" class="text-xs text-amber-300">
                         Аналитика всё ещё считается, данные обновляются автоматически.
                       </p>
+                      <p v-else-if="chatError" class="text-xs text-rose-300">
+                        {{ chatError }}
+                      </p>
                     </div>
 
                     <!-- Stats row -->
@@ -393,7 +413,7 @@ watch(
                         class="flex flex-col gap-1 rounded-[14px] bg-slate-900/80 p-3 ring-1 ring-white/10"
                       >
                         <div class="flex items-center justify-between">
-                          <span class="text-sm uppercase tracking-wide text-slate-400"> QR </span>
+                          <span class="text-sm tracking-wide text-slate-400"> QR </span>
                           <QrCode class="h-5 w-5 text-[#38BDF8]" />
                         </div>
                         <div class="text-xl font-semibold text-slate-50">
@@ -405,9 +425,7 @@ watch(
                         class="flex flex-col gap-1 rounded-[14px] bg-slate-900/80 p-3 ring-1 ring-white/10"
                       >
                         <div class="flex items-center justify-between">
-                          <span class="text-sm uppercase tracking-wide text-slate-400">
-                            Печати
-                          </span>
+                          <span class="text-sm tracking-wide text-slate-400"> Печати </span>
                           <Stamp class="h-5 w-5 text-[#3DD68C]" />
                         </div>
                         <div class="text-xl font-semibold text-slate-50">
@@ -419,9 +437,7 @@ watch(
                         class="flex flex-col gap-1 rounded-[14px] bg-slate-900/80 p-3 ring-1 ring-white/10"
                       >
                         <div class="flex items-center justify-between">
-                          <span class="text-sm uppercase tracking-wide text-slate-400">
-                            Подписи
-                          </span>
+                          <span class="text-sm tracking-wide text-slate-400"> Подписи </span>
                           <PenTool class="h-5 w-5 text-[#FBBF24]" />
                         </div>
                         <div class="text-xl font-semibold text-slate-50">
@@ -450,9 +466,9 @@ watch(
                         class="rounded-[16px] bg-slate-900/80 p-4 ring-1 ring-[#F5A524]/30"
                       >
                         <div class="mb-2 flex items-center gap-2 text-amber-300">
-                          <AlertTriangle class="h-4 w-4" />
+                          <ThumbsUp class="h-4 w-4" />
                           <span class="font-medium text-base"
-                            >Замечания ({{ analysisMistakes.length }})</span
+                            >Улучшения ({{ analysisMistakes.length }})</span
                           >
                         </div>
                         <ul class="space-y-2 text-base text-slate-200">

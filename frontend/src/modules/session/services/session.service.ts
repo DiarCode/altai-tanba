@@ -4,7 +4,9 @@ import { apiClient } from '@/core/config/axios-instance.config'
 
 import {
   CATEGORIES_FORMATTED,
+  type ChatResponseDto,
   type DocumentAnalysisStatusDto,
+  type DocumentChatPayload,
   type LabelsDetection,
   type LabelsPositionPayload,
   type ListSessionsParams,
@@ -13,6 +15,7 @@ import {
   type RawLabelsPositionPayload,
   type SessionDocumentDetailsDto,
   type SessionDocumentDto,
+  type SessionDocumentsLabelsMap,
   type SessionDocumentsQueryParams,
   type SessionDto,
 } from '../models/session.models'
@@ -35,10 +38,18 @@ type SessionCreationPayload = File[] | FormData
 type SessionDocumentDetailsResponse = Omit<SessionDocumentDetailsDto, 'labelsPosition'> & {
   labelsPosition?: RawLabelsPositionPayload | null
 }
+type ChatResponseApiDto = {
+  answer: string
+  model?: string | null
+  prompt_tokens?: number | null
+  completion_tokens?: number | null
+  total_tokens?: number | null
+}
 
 class SessionService {
   private readonly baseUrl = '/sessions'
   private readonly analysisUrl = '/document-analysis'
+  private readonly chatBaseUrl = '/chat'
 
   private handleError(error: unknown, fallbackMessage: string): never {
     if (isAxiosError(error)) {
@@ -127,6 +138,39 @@ class SessionService {
     }
   }
 
+  async getSessionDocumentsLabelsMap(
+    sessionId: SessionId,
+  ): Promise<SessionDocumentsLabelsMap> {
+    try {
+      const response = await apiClient.get<SessionDocumentsLabelsMap>(
+        `${this.baseUrl}/${sessionId}/documents/labels-map`,
+      )
+      return response.data
+    } catch (error) {
+      this.handleError(error, 'Не удалось получить карту разметки документов.')
+    }
+  }
+
+  async sendDocumentChatMessage(
+    documentId: DocumentId,
+    payload: DocumentChatPayload,
+  ): Promise<ChatResponseDto> {
+    try {
+      const response = await apiClient.post<ChatResponseApiDto>(
+        `${this.chatBaseUrl}/${documentId}`,
+        { message: payload.message },
+        payload.language
+          ? {
+              headers: { 'Accept-Language': payload.language },
+            }
+          : undefined,
+      )
+      return this.normalizeChatResponse(response.data)
+    } catch (error) {
+      this.handleError(error, 'Не удалось получить ответ от чат-ассистента.')
+    }
+  }
+
   private normalizeDocumentDetails(raw: SessionDocumentDetailsResponse): SessionDocumentDetailsDto {
     return {
       ...raw,
@@ -195,13 +239,23 @@ class SessionService {
     const normalizedCategory = CATEGORIES_FORMATTED[category as keyof typeof CATEGORIES_FORMATTED]
 
     return {
-      category: normalizedCategory,
+      category: normalizedCategory ?? category,
       area,
       x: bbox.x / width,
       y: bbox.y / height,
       width: bbox.width / width,
       height: bbox.height / height,
-      confidence: Math.round(confidence * 100) / 100,
+      confidence: confidence ? Math.round(confidence * 100) / 100 : 1,
+    }
+  }
+
+  private normalizeChatResponse(payload: ChatResponseApiDto): ChatResponseDto {
+    return {
+      answer: payload.answer,
+      model: payload.model ?? null,
+      promptTokens: payload.prompt_tokens ?? null,
+      completionTokens: payload.completion_tokens ?? null,
+      totalTokens: payload.total_tokens ?? null,
     }
   }
 

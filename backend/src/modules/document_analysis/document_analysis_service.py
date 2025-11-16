@@ -18,7 +18,7 @@ class DocumentAnalysisService:
     4. Save results to database
     """
 
-    async def analyze_document(self, document_id: str | int) -> Dict[str, Any]:
+    async def analyze_document(self, session_id: int, document_id: str | int) -> Dict[str, Any]:
         """
         Analyze a document for fraud compliance.
         
@@ -63,7 +63,7 @@ class DocumentAnalysisService:
             try:
                 print(f"[DEBUG] Downloading original PDF from S3...")
                 start = time.time()
-                pdf_bytes = await s3_service.download_original_pdf(document_id)
+                pdf_bytes = await s3_service.download_original_pdf(session_id, document_id)
                 print(f"[DEBUG] PDF downloaded in {time.time() - start:.2f}s")
             except Exception as e:
                 error_msg = f"Failed to download PDF: {str(e)}"

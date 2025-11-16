@@ -10,8 +10,8 @@ from src.modules.document_analysis.document_analysis_service import document_ana
 router = APIRouter(prefix="/document-analysis", tags=["Document Analysis"])
 
 
-@router.post("/analyze", response_model=AnalyzeDocumentResponse, status_code=200)
-async def analyze_document(request: AnalyzeDocumentRequest):
+@router.post("/sessions/{session_id}/analyze", response_model=AnalyzeDocumentResponse, status_code=200)
+async def analyze_document(session_id: int, request: AnalyzeDocumentRequest):
     """
     Analyze a document for fraud compliance.
     
@@ -25,7 +25,7 @@ async def analyze_document(request: AnalyzeDocumentRequest):
     Status is tracked in the database (PROCESSING -> COMPLETED/FAILED).
     """
     try:
-        result = await document_analysis_service.analyze_document(request.documentId)
+        result = await document_analysis_service.analyze_document(session_id, request.documentId)
         return AnalyzeDocumentResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

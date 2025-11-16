@@ -3,8 +3,11 @@ import { type MaybeRef, computed, unref } from 'vue'
 
 import {
   DocumentAnalysisState,
+  type ChatResponseDto,
   type DocumentAnalysisStatusDto,
+  type DocumentChatPayload,
   type ListSessionsParams,
+  type SessionDocumentsLabelsMap,
   type SessionDocumentsQueryParams,
   type SessionDto,
 } from '../models/session.models'
@@ -17,12 +20,13 @@ export const SESSION_QUERY_KEYS = {
   documents: ['sessions', 'documents'] as const,
   documentDetails: ['sessions', 'document-details'] as const,
   analysis: ['sessions', 'document-analysis'] as const,
+  labelsMap: ['sessions', 'labels-map'] as const,
 } as const
 
 export function useSessionsList(params?: MaybeRef<ListSessionsParams | undefined>) {
   const resolvedParams = computed(() => unref(params) ?? {})
 
-  return useQuery({
+  return useQuery<SessionDocumentsLabelsMap>({
     queryKey: computed(() => [...SESSION_QUERY_KEYS.list, resolvedParams.value]),
     queryFn: () => sessionService.listSessions(resolvedParams.value),
   })
@@ -140,6 +144,47 @@ export function useCreateSession() {
       queryClient.invalidateQueries({
         queryKey: [...SESSION_QUERY_KEYS.detail, session.id],
       })
+    },
+  })
+}
+
+export interface UseSessionLabelsMapOptions {
+  enabled?: MaybeRef<boolean | undefined>
+}
+
+export function useSessionDocumentsLabelsMap(
+  sessionId: MaybeRef<string | number | undefined>,
+  options?: MaybeRef<UseSessionLabelsMapOptions | undefined>,
+) {
+  const resolvedId = computed(() => unref(sessionId))
+  const resolvedOptions = computed(() => unref(options))
+  const enabled = computed(() => {
+    const optionEnabled =
+      resolvedOptions.value?.enabled !== undefined ? unref(resolvedOptions.value.enabled) : true
+    return Boolean(resolvedId.value) && optionEnabled
+  })
+
+  return useQuery({
+    queryKey: computed(() => [...SESSION_QUERY_KEYS.labelsMap, resolvedId.value]),
+    queryFn: () => {
+      if (!resolvedId.value) {
+        throw new SessionServiceError('Не передан идентификатор сессии.')
+      }
+      return sessionService.getSessionDocumentsLabelsMap(resolvedId.value)
+    },
+    enabled,
+  })
+}
+
+export function useDocumentChat(documentId: MaybeRef<string | number | undefined>) {
+  const resolvedDocumentId = computed(() => unref(documentId))
+
+  return useMutation<ChatResponseDto, SessionServiceError, DocumentChatPayload>({
+    mutationFn: (payload) => {
+      if (!resolvedDocumentId.value) {
+        throw new SessionServiceError('Не удалось определить документ для чата.')
+      }
+      return sessionService.sendDocumentChatMessage(resolvedDocumentId.value, payload)
     },
   })
 }

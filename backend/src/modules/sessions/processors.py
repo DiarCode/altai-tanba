@@ -8,6 +8,7 @@ from typing import Dict, List
 from prisma import Json
 
 from src.core.s3.s3_service import s3_service
+from src.modules.document_analysis import document_analysis_service
 from src.modules.mark_service.services.document_processor import DigitalInspectorProcessor
 from src.modules.mark_service.utils import build_labeled_pdf, draw_boxes_on_page, yolo_results_to_detections
 from src.modules.mark_service.formatters import build_challenge_json
@@ -44,7 +45,7 @@ async def process_document_async(session_id: int, document_id: int, file_path: P
         original_pdf_path = doc_dir / "original.pdf"
 
         # 2) Upload original
-        original_key = f"sessions/{session_id}/documents/{document_id}/original.pdf"
+        original_key = f"/sessions/{session_id}/documents/{document_id}/original.pdf"
         original_url = s3.upload_file(str(original_pdf_path), original_key)
 
         # 3) Upload pages
@@ -54,12 +55,13 @@ async def process_document_async(session_id: int, document_id: int, file_path: P
             url = s3.upload_file(str(p.path), key)
             page_urls[p.index] = url
 
+        print(f"[PROCESSOR] Document {document_id} uploaded {len(pages)} pages.")
         # 4) Trigger document analysis with unified key (numeric document id)
-        # try:
-        #     await document_analysis_service.analyze_document(document_id)
-        # except Exception as _e:
-        #     # Non-fatal for labels pipeline; analysis status is tracked separately
-        #     print(f"[ANALYSIS] Document {document_id} analysis failed: {_e}")
+        try:
+            await document_analysis_service.document_analysis_service.analyze_document(session_id, document_id)
+        except Exception as _e:
+            # Non-fatal for labels pipeline; analysis status is tracked separately
+            print(f"[ANALYSIS] Document {document_id} analysis failed: {_e}")
 
          # 5) Inference
         page_dets_raw = processor.run_inference_on_pages(pages, conf_thres=0.25)

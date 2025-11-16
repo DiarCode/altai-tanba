@@ -72,6 +72,8 @@ export interface SessionDocumentDetailsDto extends SessionDocumentDto {
   labelsPosition?: LabelsPositionPayload | null
 }
 
+export type SessionDocumentsLabelsMap = Record<string, Record<string, RawLabelsPagePayload>>
+
 export interface RawLabelsAnnotationBBox {
   x: number
   y: number
@@ -83,7 +85,7 @@ export interface RawLabelsAnnotation {
   area: number
   bbox: RawLabelsAnnotationBBox
   category: string
-  confidence: number
+  confidence?: number
 }
 
 export type RawLabelsAnnotationRecord = Record<string, RawLabelsAnnotation>
@@ -134,4 +136,17 @@ export interface DocumentAnalysisStatusDto {
   documentSummary?: string | null
   errorLog?: string | null
   message?: string | null
+}
+
+export interface ChatResponseDto {
+  answer: string
+  model?: string | null
+  promptTokens?: number | null
+  completionTokens?: number | null
+  totalTokens?: number | null
+}
+
+export interface DocumentChatPayload {
+  message: string
+  language?: string
 }

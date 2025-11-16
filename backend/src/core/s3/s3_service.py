@@ -76,7 +76,7 @@ class S3Service:
         except Exception as e:
             raise Exception(f"Error downloading document images: {str(e)}")
 
-    async def download_original_pdf(self, document_id: str) -> bytes:
+    async def download_original_pdf(self, session_id: int, document_id: str) -> bytes:
         """
         Download the original PDF from MinIO.
         
@@ -90,7 +90,7 @@ class S3Service:
             Exception: If download fails
         """
         try:
-            key = f"{document_id}/original.pdf"
+            key = f"sessions/{session_id}/documents/{document_id}/original.pdf"
             
             # Download the PDF
             file_obj = io.BytesIO()
