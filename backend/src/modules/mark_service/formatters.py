@@ -34,6 +34,7 @@ def build_challenge_json(pdf_name: str, pages: List[PageImage], page_dets: Dict[
                             "height": det.h,
                         },
                         "area": det.area,
+                        "confidence": det.confidence,
                     }
                 }
             )

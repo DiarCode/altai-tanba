@@ -1,10 +1,10 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from src.modules.document_analysis_models import (
+from src.modules.document_analysis.document_analysis_models import (
     AnalyzeDocumentRequest,
     AnalyzeDocumentResponse,
     DocumentAnalysisStatusResponse
 )
-from src.modules.document_analysis_service import document_analysis_service
+from src.modules.document_analysis.document_analysis_service import document_analysis_service
 
 
 router = APIRouter(prefix="/document-analysis", tags=["Document Analysis"])
@@ -47,7 +47,7 @@ async def analyze_document_async(request: AnalyzeDocumentRequest, background_tas
     }
 
 
-@router.get("/status/{document_id}", response_model=DocumentAnalysisStatusResponse)
+@router.get("/status/{document_id:path}", response_model=DocumentAnalysisStatusResponse)
 async def get_analysis_status(document_id: str):
     """
     Get the current analysis status for a document.

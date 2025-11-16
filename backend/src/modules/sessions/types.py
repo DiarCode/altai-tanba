@@ -47,6 +47,7 @@ class SessionDocumentDTO(BaseModel):
 	created_at: datetime
 	updated_at: datetime
 	verification: Optional[SessionDocumentVerification] = None
+	labels_position: Optional[dict] = None
 
 
 class SessionDocumentDetailsDto(SessionDocumentDTO):
@@ -60,5 +61,5 @@ __all__ = [
 	"SessionDocumentVerification",
 	"SessionDocumentDTO",
 	"SessionDocumentDetailsDto",
+    # keep exports stable
 ]
-

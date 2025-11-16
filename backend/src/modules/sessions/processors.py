@@ -2,22 +2,21 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
+import shutil
 from typing import Dict, List
 
-from prisma import Prisma, Json
+from prisma import Json
 
-from src.core.s3 import S3Client, MockS3Client
-from src.core.config.settings import settings
+from src.core.s3.s3_service import s3_service
 from src.modules.mark_service.services.document_processor import DigitalInspectorProcessor
 from src.modules.mark_service.utils import build_labeled_pdf, draw_boxes_on_page, yolo_results_to_detections
 from src.modules.mark_service.formatters import build_challenge_json
 from src.core.utils.pdf import pdf_to_images
 from src.modules.sessions.labels_payload import DetectionOut, PageArtifacts
-from src.modules.text_service.client import trigger_document_ocr
+from src.core.db.prisma import get_db
 
 
-def _make_s3() -> S3Client | MockS3Client:
-    return MockS3Client() if settings.USE_STUB_ADAPTER else S3Client()
+
 
 
 async def process_document_async(session_id: int, document_id: int, file_path: Path, work_root: Path) -> None:
@@ -25,10 +24,18 @@ async def process_document_async(session_id: int, document_id: int, file_path: P
     Background task: process a single PDF, upload artifacts to S3, store JSONB payload
     and detections summary into DB, and finalize status.
     """
-    db = Prisma()
-    await db.connect()
+    db = await get_db()
+    def _safe_remove(path: Path) -> None:
+        try:
+            if path.is_dir():
+                shutil.rmtree(path, ignore_errors=True)
+            elif path.is_file():
+                path.unlink(missing_ok=True)  # py>=3.8
+        except Exception as _e:
+            print(f"[CLEANUP] Failed to remove {path}: {_e}")
+
     try:
-        s3 = _make_s3()
+        s3 = s3_service
         processor = DigitalInspectorProcessor(s3_client=s3)
 
         # 1) PDF → images
@@ -47,10 +54,14 @@ async def process_document_async(session_id: int, document_id: int, file_path: P
             url = s3.upload_file(str(p.path), key)
             page_urls[p.index] = url
 
-        # 4) Trigger text service stub
-        trigger_document_ocr(document_id, [page_urls[i] for i in sorted(page_urls)])
+        # 4) Trigger document analysis with unified key (numeric document id)
+        # try:
+        #     await document_analysis_service.analyze_document(document_id)
+        # except Exception as _e:
+        #     # Non-fatal for labels pipeline; analysis status is tracked separately
+        #     print(f"[ANALYSIS] Document {document_id} analysis failed: {_e}")
 
-        # 5) Inference
+         # 5) Inference
         page_dets_raw = processor.run_inference_on_pages(pages, conf_thres=0.25)
         # Convert to DetectionOut (camelCase) for local flags only
         page_dets: Dict[int, List[DetectionOut]] = {}
@@ -103,9 +114,21 @@ async def process_document_async(session_id: int, document_id: int, file_path: P
 
         safe_key = _safe_graphql_key(pdf_name)
         challenge_json = build_challenge_json(safe_key, pages, page_dets_raw)
-        # Preserve original filename inside payload
+        # Preserve original filename and embed artifacts (URLs) inside payload
         if safe_key in challenge_json and isinstance(challenge_json[safe_key], dict):
             challenge_json[safe_key]["original_name"] = pdf_name
+            challenge_json[safe_key]["artifacts"] = {
+                "originalPdfUrl": original_url,
+                "labeledPdfUrl": labeled_pdf_url,
+                "pages": [
+                    {
+                        "pageIndex": p.pageIndex,
+                        "imageUrl": p.imageUrl,
+                        "labeledImageUrl": p.labeledImageUrl,
+                    }
+                    for p in labeled_pages
+                ],
+            }
 
         # 7) Persist to DB
         await db.sessiondocument.update(
@@ -119,6 +142,10 @@ async def process_document_async(session_id: int, document_id: int, file_path: P
                 "status": "SUCCESSFUL",
             },
         )
+
+        # 8) Cleanup working artifacts (pages, labeled pdf, original copy) & temp upload
+        _safe_remove(doc_dir)
+        _safe_remove(file_path)
 
         # Mark session SUCCESS if all documents are SUCCESSFUL
         total_docs = await db.sessiondocument.count(where={"sessionId": session_id})
@@ -141,5 +168,9 @@ async def process_document_async(session_id: int, document_id: int, file_path: P
         except Exception:
             pass
         print(f"[PROCESSOR] Document {document_id} failed: {e}")
-    finally:
-        await db.disconnect()
+        # Cleanup even on failure (artifacts already useless); remove only temp upload dir & pages
+        try:
+            _safe_remove(doc_dir)
+            _safe_remove(file_path)
+        except Exception:
+            pass

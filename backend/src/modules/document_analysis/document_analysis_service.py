@@ -18,7 +18,7 @@ class DocumentAnalysisService:
     4. Save results to database
     """
 
-    async def analyze_document(self, document_id: str) -> Dict[str, Any]:
+    async def analyze_document(self, document_id: str | int) -> Dict[str, Any]:
         """
         Analyze a document for fraud compliance.
         
@@ -44,9 +44,15 @@ class DocumentAnalysisService:
             # Step 1: Create initial database record with PROCESSING status
             print(f"[DEBUG] Creating analysis record...")
             start = time.time()
+            # Normalize document id to numeric string key
+            try:
+                doc_int = int(str(document_id).split('/')[-1])
+            except ValueError:
+                raise Exception(f"Invalid document id: {document_id}")
+
             analysis = await db.documentanalysis.create(
                 data={
-                    "documentId": document_id,
+                    "documentId": str(doc_int),
                     "status": "PROCESSING"
                 }
             )
@@ -134,9 +140,13 @@ class DocumentAnalysisService:
         try:
             await db.connect()
             
-            analysis = await db.documentanalysis.find_unique(
-                where={"documentId": document_id}
-            )
+            # Accept either numeric id or legacy prefix; normalize to numeric string
+            try:
+                key = str(int(document_id.split('/')[-1]))
+            except ValueError:
+                key = document_id
+
+            analysis = await db.documentanalysis.find_unique(where={"documentId": key})
             
             if not analysis:
                 return {

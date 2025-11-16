@@ -19,6 +19,11 @@ async def disconnect() -> None:
         await prisma.disconnect()
 
 
+async def get_db() -> Prisma:
+    # На всякий случай гарантируем, что подключен
+    await connect()
+    return prisma
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
