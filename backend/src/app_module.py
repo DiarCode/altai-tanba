@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from src.core.config.settings import settings
 from src.modules.document_analysis.document_analysis_router import router as document_analysis_router
+from src.modules.chat.chat_router import router as chat_router
 from src.core.db.prisma import lifespan
 from src.modules.sessions.router import router as sessions_router
 
@@ -38,5 +39,6 @@ def create_app() -> FastAPI:
 
     # Register routers
     app.include_router(document_analysis_router, prefix=settings.FASTAPI_API_V1_PATH)
+    app.include_router(chat_router, prefix=settings.FASTAPI_API_V1_PATH)
 
     return app
