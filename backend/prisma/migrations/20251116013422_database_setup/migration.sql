@@ -4,6 +4,9 @@ CREATE TYPE "SESSION_STATUS" AS ENUM ('PROCESSING', 'FAILED', 'SUCCESS');
 -- CreateEnum
 CREATE TYPE "DOCUMENT_STATUS" AS ENUM ('PENDING', 'FAILED', 'SUCCESSFUL');
 
+-- CreateEnum
+CREATE TYPE "DocumentAnalysisStatus" AS ENUM ('PROCESSING', 'COMPLETED', 'FAILED');
+
 -- CreateTable
 CREATE TABLE "sessions" (
     "id" SERIAL NOT NULL,
@@ -48,11 +51,31 @@ CREATE TABLE "session_document_texts" (
     CONSTRAINT "session_document_texts_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "document_analyses" (
+    "id" TEXT NOT NULL,
+    "documentId" TEXT NOT NULL,
+    "status" "DocumentAnalysisStatus" NOT NULL DEFAULT 'PROCESSING',
+    "fraudSentences" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "mistakeWords" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "documentType" TEXT,
+    "documentSummary" TEXT,
+    "documentText" TEXT,
+    "errorLog" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "document_analyses_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE INDEX "session_documents_session_id_idx" ON "session_documents"("session_id");
 
 -- CreateIndex
 CREATE INDEX "session_document_texts_document_id_idx" ON "session_document_texts"("document_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "document_analyses_documentId_key" ON "document_analyses"("documentId");
 
 -- AddForeignKey
 ALTER TABLE "session_documents" ADD CONSTRAINT "session_documents_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;

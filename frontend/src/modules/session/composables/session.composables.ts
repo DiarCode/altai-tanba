@@ -172,6 +172,7 @@ export function useSessionDocumentsLabelsMap(
       }
       return sessionService.getSessionDocumentsLabelsMap(resolvedId.value)
     },
+    refetchInterval: 5000,
     enabled,
   })
 }
