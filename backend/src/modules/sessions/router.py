@@ -69,6 +69,69 @@ async def list_session_documents(
     return [map_document_to_dto(d) for d in docs]
 
 
+@router.get("/{session_id}/documents/labels-map")
+async def get_session_documents_labels_map(
+    session_id: int,
+    db: Prisma = Depends(get_db),
+):
+    """Return a mapping of original file name -> pages -> annotations, page_size.
+
+    Reuses the challenge JSON shape produced by the processing pipeline, but
+    normalizes the top-level key to the original file name.
+    """
+    docs = await db.sessiondocument.find_many(
+        where={"sessionId": session_id}, order={"createdAt": "asc"}
+    )
+
+    result: dict = {}
+
+    for d in docs:
+        lp = d.labelsPosition
+        if not lp or not isinstance(lp, dict):
+            continue
+
+        def pick_value(obj: dict) -> dict | None:
+            # If object already looks like a page-mapping or contains artifacts/original_name, use it
+            if any(k.startswith("page_") for k in obj.keys()) or "artifacts" in obj or "original_name" in obj:
+                return obj
+            # Otherwise, try first nested value
+            try:
+                first_val = next(iter(obj.values())) if obj else None
+                if isinstance(first_val, dict):
+                    return first_val
+            except Exception:
+                return None
+            return None
+
+        value = pick_value(lp)
+        if not value:
+            continue
+
+        # Determine original file name
+        name = None
+        if isinstance(value, dict):
+            name = value.get("original_name")
+        if not name:
+            name = d.originalName or f"document_{d.id}.pdf"
+
+        # Build pages-only mapping (exclude helper fields)
+        pages_obj: dict = {}
+        for k, v in value.items():
+            if k.startswith("page_") and isinstance(v, dict):
+                pages_obj[k] = v
+
+        # Handle duplicate names by suffixing
+        out_key = name
+        suffix = 1
+        while out_key in result:
+            suffix += 1
+            out_key = f"{name} ({suffix})"
+
+        result[out_key] = pages_obj
+
+    return result
+
+
 @router.get("/{session_id}/documents/{doc_id}", response_model=SessionDocumentDetailsDto)
 async def get_session_document(
     session_id: int,
