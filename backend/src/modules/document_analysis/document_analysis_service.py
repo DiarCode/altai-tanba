@@ -101,6 +101,7 @@ class DocumentAnalysisService:
                     "mistakeWords": llm_results["mistakeWords"],
                     "documentType": llm_results["documentType"],
                     "documentSummary": llm_results["documentSummary"],
+                    "documentText": extracted_text,
                     "updatedAt": datetime.utcnow()
                 }
             )

@@ -69,16 +69,19 @@ class LLMService:
 
     async def _detect_fraud(self, client: httpx.AsyncClient, text: str) -> List[str]:
         """Detect fraudulent sentences in the text."""
-        prompt = f"""INSTRUCTIONS: You are an assistant that detects fraudulent or suspicious content in documents. Analyze the text and identify any fraudulent content, scams, illegal requests, or suspicious clauses. Instead of returning the exact sentences from the document, return brief summary descriptions of the fraud found. Return ONLY the fraud summaries separated by semicolons (;). If no fraud is detected, return an empty string. ANSWER ONLY IN RUSSIAN.
+        prompt = f"""INSTRUCTIONS: You are an assistant that detects fraudulent or suspicious content in documents. Analyze the text and identify any fraudulent content, scams, illegal requests, or suspicious clauses. Instead of returning the exact sentences from the document, return brief summary descriptions of the fraud found. Return ONLY the fraud summaries separated by semicolons (;). If no fraud is detected, return the word "NONE". ANSWER ONLY IN RUSSIAN.
 
 EXAMPLE:
 Input: "Вы должны заплатить 10000 долларов просто так без причины"
 Response: "В тексте документа замечен неправомерный перевод больших сумм"
 
+Input: "Обычный договор аренды помещения"
+Response: NONE
+
 TEXT FOR ANALYSIS:
 {text}
 
-RESPONSE FORMAT: fraud_summary1; fraud_summary2; fraud_summary3"""
+RESPONSE FORMAT: fraud_summary1; fraud_summary2; fraud_summary3 OR "NONE" if no fraud detected"""
 
         try:
             print(f"[DEBUG] Sending fraud detection request to {self.base_url}/chat...")
@@ -97,11 +100,16 @@ RESPONSE FORMAT: fraud_summary1; fraud_summary2; fraud_summary3"""
             result = response.json()
             fraud_text = result.get("response", "").strip()
             
-            # Parse the semicolon-separated list
-            if not fraud_text:
+            # Handle empty or "NONE" responses
+            if not fraud_text or fraud_text.upper() == "NONE" or fraud_text == '""' or fraud_text == "''":
                 return []
             
+            # Parse the semicolon-separated list
             sentences = [s.strip() for s in fraud_text.split(";") if s.strip()]
+            
+            # Filter out any "NONE" or empty strings that might appear in the list
+            sentences = [s for s in sentences if s and s.upper() != "NONE"]
+            
             return sentences
             
         except Exception as e:

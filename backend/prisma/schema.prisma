@@ -100,6 +100,7 @@ model DocumentAnalysis {
   mistakeWords     String[]                @default([])
   documentType     String?
   documentSummary  String?
+  documentText     String?                 @db.Text
   errorLog         String?
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
